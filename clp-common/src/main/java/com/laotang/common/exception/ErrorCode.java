@@ -69,7 +69,12 @@ public enum ErrorCode {
     SECKILL_STOCK_EMPTY(7003, "秒杀库存不足", 409),
     SECKILL_DUPLICATE(7004, "重复抢购(一人一单)", 409),
     SECKILL_TOKEN_INVALID(7005, "秒杀令牌无效或已使用", 422),
-    SECKILL_RATE_LIMITED(7006, "秒杀请求过于频繁", 429);
+    SECKILL_RATE_LIMITED(7006, "秒杀请求过于频繁", 429),
+
+    // ---------- 内容社区 ----------
+    BLOG_NOT_FOUND(8001, "笔记不存在", 404),
+    BLOG_HIDDEN(8002, "笔记已被隐藏", 403),
+    CONTENT_NOT_OWNER(8003, "只能操作自己的内容", 403);
 
     private final int code;
     private final String message;

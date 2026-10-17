@@ -2,6 +2,7 @@ package com.laotang.core.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.laotang.common.constant.RedisKey;
 import com.laotang.common.exception.BusinessException;
 import com.laotang.common.exception.ErrorCode;
 import com.laotang.common.result.PageResult;
@@ -14,6 +15,7 @@ import com.laotang.core.user.service.IUserService;
 import com.laotang.parameter.user.response.UserBriefResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -31,6 +33,7 @@ public class FollowServiceImpl implements IFollowService {
 
     private final FollowMapper followMapper;
     private final IUserService userService;
+    private final StringRedisTemplate redis;
 
     @Override
     public void follow(Long userId, Long targetUserId) {
@@ -41,6 +44,9 @@ public class FollowServiceImpl implements IFollowService {
             throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
         }
 
+        // 先确保粉丝计数器存在(未命中会回源数据库)
+        getFollowerCount(targetUserId);
+
         Follow follow = new Follow();
         follow.setUserId(userId);
         follow.setFollowUserId(targetUserId);
@@ -48,15 +54,25 @@ public class FollowServiceImpl implements IFollowService {
         try {
             followMapper.insert(follow);
         } catch (DuplicateKeyException e) {
-            // 幂等:重复关注视为成功
+            // 幂等:重复关注视为成功,不重复计数
+            return;
         }
+        redis.opsForValue().increment(RedisKey.userFollowers(targetUserId));
     }
 
     @Override
     public void unfollow(Long userId, Long targetUserId) {
-        followMapper.delete(new LambdaQueryWrapper<Follow>()
+        getFollowerCount(targetUserId);
+
+        int rows = followMapper.delete(new LambdaQueryWrapper<Follow>()
                 .eq(Follow::getUserId, userId)
                 .eq(Follow::getFollowUserId, targetUserId));
+        if (rows > 0) {
+            Long remaining = redis.opsForValue().decrement(RedisKey.userFollowers(targetUserId));
+            if (remaining != null && remaining < 0) {
+                redis.opsForValue().set(RedisKey.userFollowers(targetUserId), "0");
+            }
+        }
     }
 
     @Override
@@ -75,6 +91,41 @@ public class FollowServiceImpl implements IFollowService {
                         .eq(Follow::getUserId, userId)
                         .orderByDesc(Follow::getCreatedAt));
         return toBriefPage(result, Follow::getFollowUserId);
+    }
+
+    @Override
+    public List<Long> findFollowerIds(Long userId) {
+        return followMapper.selectList(new LambdaQueryWrapper<Follow>()
+                        .eq(Follow::getFollowUserId, userId)
+                        .select(Follow::getUserId))
+                .stream()
+                .map(Follow::getUserId)
+                .toList();
+    }
+
+    @Override
+    public List<Long> findFolloweeIds(Long userId) {
+        return followMapper.selectList(new LambdaQueryWrapper<Follow>()
+                        .eq(Follow::getUserId, userId)
+                        .select(Follow::getFollowUserId))
+                .stream()
+                .map(Follow::getFollowUserId)
+                .toList();
+    }
+
+    @Override
+    public long getFollowerCount(Long userId) {
+        String key = RedisKey.userFollowers(userId);
+        String cached = redis.opsForValue().get(key);
+        if (cached != null) {
+            return Long.parseLong(cached);
+        }
+
+        Long count = followMapper.selectCount(
+                new LambdaQueryWrapper<Follow>().eq(Follow::getFollowUserId, userId));
+        long value = count == null ? 0L : count;
+        redis.opsForValue().set(key, String.valueOf(value));
+        return value;
     }
 
     /**

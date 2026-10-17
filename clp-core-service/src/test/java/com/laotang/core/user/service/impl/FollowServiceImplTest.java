@@ -9,6 +9,7 @@ import com.laotang.core.user.entity.User;
 import com.laotang.core.user.mapper.FollowMapper;
 import com.laotang.core.user.service.IUserService;
 import com.laotang.parameter.user.response.UserBriefResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import java.util.List;
 
@@ -23,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,8 +38,17 @@ class FollowServiceImplTest {
     private FollowMapper followMapper;
     @Mock
     private IUserService userService;
+    @Mock
+    private StringRedisTemplate redis;
+    @Mock
+    private ValueOperations<String, String> valueOps;
     @InjectMocks
     private FollowServiceImpl followService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(redis.opsForValue()).thenReturn(valueOps);
+    }
 
     @Test
     @DisplayName("不能关注自己 -> 3005")
@@ -62,16 +76,22 @@ class FollowServiceImplTest {
     @DisplayName("重复关注是幂等的,不抛异常")
     void follow_duplicateIsIdempotent() {
         when(userService.getById(2L)).thenReturn(new User());
+        when(valueOps.get(anyString())).thenReturn("0");
         when(followMapper.insert(any(Follow.class))).thenThrow(new DuplicateKeyException("dup"));
 
         assertThatCode(() -> followService.follow(1L, 2L)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("取消关注调用删除")
+    @DisplayName("取消关注调用删除并递减粉丝数")
     void unfollow() {
+        when(valueOps.get(anyString())).thenReturn("1");
+        when(followMapper.delete(any())).thenReturn(1);
+
         followService.unfollow(1L, 2L);
+
         verify(followMapper).delete(any());
+        verify(valueOps).decrement("clp:user:followers:2");
     }
 
     @Test

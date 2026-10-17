@@ -101,3 +101,6 @@ clp:
     issuer: community-life-platform
   order:
     timeout: 30m
+  feed:
+    # 粉丝数达到该阈值的作者视为大 V,只写发件箱,由读者拉取
+    big-v-threshold: 1000

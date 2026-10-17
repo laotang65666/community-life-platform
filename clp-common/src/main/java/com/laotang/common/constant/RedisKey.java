@@ -20,6 +20,11 @@ public final class RedisKey {
     public static final String SECKILL_VOUCHER = PREFIX + "seckill:voucher:";
     public static final String SECKILL_IDEM = PREFIX + "idem:seckill:";
 
+    public static final String BLOG_LIKE = PREFIX + "like:blog:";
+    public static final String USER_FEED = PREFIX + "feed:user:";
+    public static final String USER_OUTBOX = PREFIX + "outbox:user:";
+    public static final String USER_FOLLOWERS = PREFIX + "user:followers:";
+
     private RedisKey() {
     }
 
@@ -65,5 +70,21 @@ public final class RedisKey {
 
     public static String seckillIdempotency(Long userId, String idemKey) {
         return SECKILL_IDEM + userId + ":" + idemKey;
+    }
+
+    public static String blogLike(Long blogId) {
+        return BLOG_LIKE + blogId;
+    }
+
+    public static String userFeed(Long userId) {
+        return USER_FEED + userId;
+    }
+
+    public static String userOutbox(Long userId) {
+        return USER_OUTBOX + userId;
+    }
+
+    public static String userFollowers(Long userId) {
+        return USER_FOLLOWERS + userId;
     }
 }
