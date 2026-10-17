@@ -183,13 +183,15 @@ public class OrderServiceImpl implements IOrderService {
     @Override
     public void accept(Long orderId, Long merchantId) {
         orderTxService.accept(orderId, merchantId);
-        notifyUser(orderId, "ORDER_ACCEPTED", "订单已接单", "商户已接单,请留意配送");
+        Order order = requireOrder(orderId);
+        notifyUser(order, "ORDER_ACCEPTED", "订单已接单", "商户已接单,请留意配送");
     }
 
     @Override
     public void complete(Long orderId, Long merchantId) {
         orderTxService.complete(orderId, merchantId);
-        notifyUser(orderId, "ORDER_COMPLETED", "订单已完成", "订单已完成,感谢您的光临");
+        Order order = requireOrder(orderId);
+        notifyUser(order, "ORDER_COMPLETED", "订单已完成", "订单已完成,感谢您的光临");
     }
 
     private void notifyMerchant(Order order) {
@@ -209,13 +211,9 @@ public class OrderServiceImpl implements IOrderService {
                 String.valueOf(order.getId()));
     }
 
-    private void notifyUser(Long orderId, String type, String title, String content) {
-        Order order = orderMapper.selectById(orderId);
-        if (order == null) {
-            return;
-        }
+    private void notifyUser(Order order, String type, String title, String content) {
         notificationService.send(
-                order.getUserId(), type, title, content, String.valueOf(orderId));
+                order.getUserId(), type, title, content, String.valueOf(order.getId()));
     }
 
     @Override

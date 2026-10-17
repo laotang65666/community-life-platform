@@ -13,6 +13,8 @@ import com.laotang.core.product.entity.Product;
 import com.laotang.core.product.mapper.ProductMapper;
 import com.laotang.core.shop.entity.Shop;
 import com.laotang.core.shop.service.IShopService;
+import com.laotang.core.stats.event.OrderEventPublisher;
+import com.laotang.core.stats.event.OrderEventType;
 import com.laotang.id.SnowflakeIdGenerator;
 import com.laotang.parameter.order.request.CreateOrderRequest;
 import com.laotang.parameter.order.request.OrderItemRequest;
@@ -42,6 +44,7 @@ public class OrderTxService {
     private final ProductMapper productMapper;
     private final IShopService shopService;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final OrderEventPublisher orderEventPublisher;
 
     @Transactional(rollbackFor = Exception.class)
     public CreatedOrder create(Long userId, CreateOrderRequest request) {
@@ -99,12 +102,17 @@ public class OrderTxService {
         order.setTotalAmount(totalAmount);
         order.setStatus(OrderStatus.CREATED.name());
         order.setRemark(request.remark() == null ? "" : request.remark());
+        // 显式设置,订单事件需要用它决定统计归属日期
+        order.setCreatedAt(LocalDateTime.now());
         orderMapper.insert(order);
 
         for (OrderItem item : items) {
             item.setOrderId(order.getId());
             orderItemMapper.insert(item);
         }
+
+        // 与业务写入同事务:订单成功则事件一定进 Outbox
+        orderEventPublisher.publish(OrderEventType.ORDER_CREATED, order);
 
         return new CreatedOrder(order, items);
     }
@@ -122,6 +130,7 @@ public class OrderTxService {
         if (rows == 0) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_CONFLICT);
         }
+        orderEventPublisher.publish(OrderEventType.ORDER_PAID, order);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -139,6 +148,7 @@ public class OrderTxService {
             throw new BusinessException(ErrorCode.ORDER_STATUS_CONFLICT);
         }
         restoreStock(orderId);
+        orderEventPublisher.publish(OrderEventType.ORDER_CANCELLED, order);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -154,6 +164,7 @@ public class OrderTxService {
         if (rows == 0) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_CONFLICT);
         }
+        orderEventPublisher.publish(OrderEventType.ORDER_ACCEPTED, order);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -169,22 +180,29 @@ public class OrderTxService {
         if (rows == 0) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_CONFLICT);
         }
+        orderEventPublisher.publish(OrderEventType.ORDER_COMPLETED, order);
     }
 
     /**
      * 关闭超时订单。条件更新保证幂等:只有 CREATED 才会被关闭。
      */
     @Transactional(rollbackFor = Exception.class)
-    public void closeIfTimeout(Long orderId) {
+    public boolean closeIfTimeout(Long orderId) {
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getId, orderId)
                 .eq(Order::getStatus, OrderStatus.CREATED.name())
                 .set(Order::getStatus, OrderStatus.CLOSED.name())
                 .set(Order::getCancelTime, LocalDateTime.now())
                 .set(Order::getCancelReason, "超时未支付"));
-        if (rows > 0) {
-            restoreStock(orderId);
+        if (rows == 0) {
+            return false;
         }
+        restoreStock(orderId);
+        Order order = orderMapper.selectById(orderId);
+        if (order != null) {
+            orderEventPublisher.publish(OrderEventType.ORDER_CLOSED, order);
+        }
+        return true;
     }
 
     private void restoreStock(Long orderId) {

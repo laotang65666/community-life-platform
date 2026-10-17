@@ -12,6 +12,7 @@ import com.laotang.core.product.entity.Product;
 import com.laotang.core.product.mapper.ProductMapper;
 import com.laotang.core.shop.entity.Shop;
 import com.laotang.core.shop.service.IShopService;
+import com.laotang.core.stats.event.OrderEventPublisher;
 import com.laotang.id.SnowflakeIdGenerator;
 import com.laotang.parameter.order.request.CreateOrderRequest;
 import com.laotang.parameter.order.request.OrderItemRequest;
@@ -46,6 +47,8 @@ class OrderTxServiceTest {
     private IShopService shopService;
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
+    @Mock
+    private OrderEventPublisher orderEventPublisher;
     @InjectMocks
     private OrderTxService orderTxService;
 

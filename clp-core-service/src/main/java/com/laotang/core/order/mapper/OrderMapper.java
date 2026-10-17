@@ -47,4 +47,19 @@ public interface OrderMapper extends BaseMapper<Order> {
               AND status = 'PAID'
             """)
     long countPendingAccept(@Param("shopId") Long shopId);
+
+    @Select("""
+            SELECT COUNT(*)
+            FROM tb_order
+            WHERE created_at >= #{start}
+            """)
+    long countCreatedSinceAll(@Param("start") LocalDateTime start);
+
+    @Select("""
+            SELECT COALESCE(SUM(total_amount), 0)
+            FROM tb_order
+            WHERE created_at >= #{start}
+              AND status IN ('PAID', 'ACCEPTED', 'COMPLETED')
+            """)
+    long sumPaidAmountSinceAll(@Param("start") LocalDateTime start);
 }

@@ -11,9 +11,11 @@ import com.laotang.common.util.PageUtils;
 import com.laotang.core.merchant.entity.Merchant;
 import com.laotang.core.merchant.service.IMerchantService;
 import com.laotang.core.shop.service.IShopService;
+import com.laotang.core.stats.service.StatsQueryService;
 import com.laotang.parameter.shop.request.UpdateShopRequest;
 import com.laotang.parameter.shop.response.ShopBriefResponse;
 import com.laotang.parameter.shop.response.ShopResponse;
+import com.laotang.parameter.stats.response.ShopStatsReportResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +39,7 @@ public class ShopController {
 
     private final IShopService shopService;
     private final IMerchantService merchantService;
+    private final StatsQueryService statsQueryService;
 
     @Operation(summary = "店铺列表")
     @GetMapping
@@ -56,6 +59,19 @@ public class ShopController {
     @GetMapping("/{shopId}")
     public Result<ShopResponse> detail(@PathVariable("shopId") Long shopId) {
         return Result.ok(shopService.getDetail(shopId));
+    }
+
+    @Operation(summary = "店铺经营报表")
+    @GetMapping("/{shopId}/stats")
+    @RequireRole(RoleEnum.MERCHANT)
+    public Result<ShopStatsReportResponse> stats(
+            @PathVariable("shopId") Long shopId,
+            @RequestParam(value = "days", defaultValue = "7") int days) {
+        Merchant merchant = merchantService.getApprovedByUserId(UserContext.getUserId());
+        if (merchant == null) {
+            throw new BusinessException(ErrorCode.MERCHANT_NOT_APPROVED);
+        }
+        return Result.ok(statsQueryService.shopReport(shopId, merchant.getId(), days));
     }
 
     @Operation(summary = "修改店铺")
