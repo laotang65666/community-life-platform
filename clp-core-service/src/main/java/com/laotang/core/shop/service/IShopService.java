@@ -19,6 +19,11 @@ public interface IShopService {
 
     ShopResponse getDetail(Long shopId);
 
+    /**
+     * 按 ID 获取店铺实体;不存在返回 null。供其他业务域做归属校验。
+     */
+    Shop getById(Long shopId);
+
     void update(Long shopId, Long merchantId, UpdateShopRequest request);
 
     /**

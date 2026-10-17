@@ -48,7 +48,12 @@ public enum ErrorCode {
     MERCHANT_NOT_APPROVED(4003, "商户审核未通过", 403),
     SHOP_CLOSED(4004, "店铺已关闭", 403),
     MERCHANT_ALREADY_APPROVED(4005, "您已经是商户", 409),
-    SHOP_NOT_FOUND(4006, "店铺不存在", 404);
+    SHOP_NOT_FOUND(4006, "店铺不存在", 404),
+
+    // ---------- 商品 ----------
+    PRODUCT_NOT_FOUND(5001, "商品不存在", 404),
+    PRODUCT_OFF_SALE(5002, "商品已下架", 409),
+    STOCK_NOT_ENOUGH(5003, "库存不足", 409);
 
     private final int code;
     private final String message;

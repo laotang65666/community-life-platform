@@ -66,6 +66,11 @@ public class ShopServiceImpl implements IShopService {
     }
 
     @Override
+    public Shop getById(Long shopId) {
+        return shopMapper.selectById(shopId);
+    }
+
+    @Override
     public void update(Long shopId, Long merchantId, UpdateShopRequest request) {
         Shop shop = shopMapper.selectById(shopId);
         if (shop == null) {
