@@ -25,9 +25,12 @@ import com.laotang.core.ai.tool.AiToolFactory;
 import com.laotang.core.ai.tool.AiToolRecorder;
 import com.laotang.core.ai.mapper.AiConversationMapper;
 import com.laotang.core.ai.mapper.AiMessageMapper;
+import com.laotang.core.ai.memory.ConversationMemoryService;
 import com.laotang.core.ai.rag.KnowledgeContext;
 import com.laotang.core.ai.rag.KnowledgeRetriever;
 import com.laotang.core.ai.service.IAiChatService;
+import com.laotang.core.ai.support.AiCircuitBreaker;
+import com.laotang.core.ai.support.ConversationLock;
 import com.laotang.framework.redis.ratelimit.RedisRateLimiter;
 import com.laotang.parameter.ai.response.ChatReplyResponse;
 import com.laotang.parameter.ai.response.ConversationResponse;
@@ -58,12 +61,17 @@ public class AiChatServiceImpl implements IAiChatService {
     private static final String DEFAULT_TITLE = "新会话";
     private static final int TITLE_MAX_LENGTH = 20;
     private static final Duration RATE_WINDOW = Duration.ofMinutes(1);
+    private static final String FALLBACK_REPLY =
+            "抱歉,AI 助手暂时不可用,请稍后再试。您也可以联系人工客服(每天 9:00-21:00)。";
 
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
     private final AiChatGateway chatGateway;
     private final AiToolFactory toolFactory;
     private final KnowledgeRetriever knowledgeRetriever;
+    private final ConversationMemoryService conversationMemory;
+    private final ConversationLock conversationLock;
+    private final AiCircuitBreaker circuitBreaker;
     private final RedisRateLimiter rateLimiter;
     private final AiChatProperties properties;
     private final ObjectMapper objectMapper;
@@ -130,7 +138,25 @@ public class AiChatServiceImpl implements IAiChatService {
         }
 
         AiConversation conversation = requireOwned(userId, conversationId);
+
+        if (!conversationLock.tryLock(conversationId)) {
+            throw new BusinessException(ErrorCode.AI_CONVERSATION_BUSY);
+        }
+        try {
+            return doChat(userId, conversation, content);
+        } finally {
+            conversationLock.unlock(conversationId);
+        }
+    }
+
+    private ChatReplyResponse doChat(
+            Long userId, AiConversation conversation, String content) {
+
+        Long conversationId = conversation.getId();
         AiScope scope = AiScope.from(conversation.getScope());
+
+        // 先刷新摘要:旧消息进入摘要,最近窗口仍保留原文
+        String summary = conversationMemory.refreshSummary(conversation);
         List<ChatTurn> history = loadHistory(conversationId);
 
         String question = content.strip();
@@ -140,26 +166,45 @@ public class AiChatServiceImpl implements IAiChatService {
         messageMapper.insert(userMessage);
         touchConversation(conversation, question, now);
 
+        // 熔断打开时直接降级,不再做检索和模型调用
+        if (circuitBreaker.isOpen()) {
+            return persistFallback(conversationId);
+        }
+
         KnowledgeContext knowledge = knowledgeRetriever.retrieve(scope, question);
 
         AiToolRecorder recorder = new AiToolRecorder();
         List<Object> tools = toolFactory.create(scope, userId, recorder);
-        ChatResult result = chatGateway.chat(
-                new AiChatCommand(scope, history, question, tools, knowledge));
+
+        ChatResult result;
+        boolean degraded = false;
+        try {
+            result = chatGateway.chat(new AiChatCommand(
+                    scope, history, question, tools, knowledge, summary));
+        } catch (BusinessException ex) {
+            if (ex.getErrorCode() != ErrorCode.AI_SERVICE_UNAVAILABLE) {
+                throw ex;
+            }
+            log.warn("AI 调用失败,返回降级话术: {}", ex.getMessage());
+            result = new ChatResult(FALLBACK_REPLY, 0, 0);
+            degraded = true;
+        }
 
         LocalDateTime repliedAt = LocalDateTime.now();
         AiMessage assistantMessage = buildMessage(
                 conversationId, AiMessageRole.ASSISTANT, result.content(), repliedAt);
         assistantMessage.setTokensIn(result.tokensIn());
         assistantMessage.setTokensOut(result.tokensOut());
-        if (!recorder.isEmpty()) {
+        if (!degraded && !recorder.isEmpty()) {
             assistantMessage.setToolCalls(serializeToolCalls(recorder));
         }
         messageMapper.insert(assistantMessage);
         markReplied(conversationId, repliedAt);
 
-        List<SourceResponse> sources = knowledge.snippets().stream()
+        List<SourceResponse> sources = degraded ? List.of()
+                : knowledge.snippets().stream()
                 .map(snippet -> new SourceResponse(
+                        snippet.docId(),
                         snippet.title(),
                         snippet.section(),
                         Math.round(snippet.score() * 1000) / 1000.0))
@@ -172,7 +217,29 @@ public class AiChatServiceImpl implements IAiChatService {
                 result.tokensIn(),
                 result.tokensOut(),
                 DateTimeUtils.toIso(assistantMessage.getCreatedAt()),
-                sources);
+                sources,
+                degraded);
+    }
+
+    /**
+     * 熔断打开时的固定降级回复,仍然落库,保证历史完整。
+     */
+    private ChatReplyResponse persistFallback(Long conversationId) {
+        LocalDateTime now = LocalDateTime.now();
+        AiMessage assistantMessage = buildMessage(
+                conversationId, AiMessageRole.ASSISTANT, FALLBACK_REPLY, now);
+        messageMapper.insert(assistantMessage);
+        markReplied(conversationId, now);
+
+        return new ChatReplyResponse(
+                String.valueOf(conversationId),
+                String.valueOf(assistantMessage.getId()),
+                FALLBACK_REPLY,
+                0,
+                0,
+                DateTimeUtils.toIso(now),
+                List.of(),
+                true);
     }
 
     @Override

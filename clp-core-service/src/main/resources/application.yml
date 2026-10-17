@@ -117,6 +117,15 @@ clp:
       history-window: 20
       # 单用户每分钟最多请求次数
       rate-limit-per-minute: 20
+      # 单次模型调用总超时
+      timeout-ms: 15000
+      # 连续失败达到阈值后熔断,打开期间直接降级
+      circuit-failure-threshold: 5
+      circuit-open-ms: 30000
+      # 会话摘要记忆
+      summary-enabled: true
+      summary-trigger-messages: 30
+      summary-max-chars: 300
     rag:
       enabled: true
       # 启动时导入 classpath:knowledge/*.md

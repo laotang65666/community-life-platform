@@ -261,3 +261,32 @@ SELECT status, COUNT(*) FROM clp.tb_outbox GROUP BY status;
 - Outbox 是否最终全部 ACKED
 
 这样能看出瓶颈出现在哪一档。
+
+---
+
+## 9. RAG 检索评估
+
+需要 ADMIN 账号,登录后拿 accessToken,然后执行:
+
+```bash
+# Git Bash
+bash rag-eval.sh <adminToken> http://localhost:8084 rag-eval-user.json
+bash rag-eval.sh <adminToken> http://localhost:8084 rag-eval-merchant.json
+```
+
+接口:`POST /api/v1/admin/ai/rag/evaluate`
+
+指标:
+
+| 指标 | 含义 |
+|---|---|
+| `hitRate` | 期望文档出现在最终证据中的用例占比 |
+| `mrr` | 首次命中名次的倒数均值,越接近 1 说明正确证据越靠前 |
+
+评估结果里会逐条列出 `hit / rank / sourceCount`,便于定位是哪条问题没召回。
+
+调参入口在 `clp.ai.rag`:
+
+- 召回不足:提高 `fusion-top-n`、`vector-candidates`、`keyword-candidates`;
+- 噪声太多:提高 `min-score`;
+- 知识切得太碎或太大:调整 `max-chunk-chars`。

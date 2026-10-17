@@ -13,12 +13,14 @@ import java.util.List;
  * @param userContent 当前问题
  * @param tools       本次可调用的工具实例
  * @param knowledge   RAG 命中的参考资料,可能为空
+ * @param summary     更早对话的摘要,可能为空
  */
 public record AiChatCommand(
         AiScope scope,
         List<ChatTurn> history,
         String userContent,
         List<Object> tools,
-        KnowledgeContext knowledge
+        KnowledgeContext knowledge,
+        String summary
 ) {
 }

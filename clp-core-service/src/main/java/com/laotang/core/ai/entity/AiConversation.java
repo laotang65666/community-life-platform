@@ -26,6 +26,16 @@ public class AiConversation {
 
     private String title;
 
+    /**
+     * 历史对话摘要,Phase D 引入。
+     */
+    private String summary;
+
+    /**
+     * 已摘要到的消息 ID,避免重复摘要。
+     */
+    private Long summaryMessageId;
+
     private LocalDateTime lastMessageAt;
 
     private LocalDateTime createdAt;

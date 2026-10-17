@@ -15,6 +15,7 @@ public record ChatReplyResponse(
         int tokensIn,
         int tokensOut,
         String createdAt,
-        List<SourceResponse> sources
+        List<SourceResponse> sources,
+        boolean degraded
 ) {
 }

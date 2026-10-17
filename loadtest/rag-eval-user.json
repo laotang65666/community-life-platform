@@ -1,0 +1,15 @@
+{
+  "scope": "USER",
+  "cases": [
+    { "question": "订单多久不支付会自动关闭?", "expectedDocIds": ["seed:user-order"] },
+    { "question": "取消订单后库存会恢复吗?", "expectedDocIds": ["seed:user-order"] },
+    { "question": "签到现在每天加多少积分?", "expectedDocIds": ["seed:user-points"] },
+    { "question": "连续签到七天有什么奖励?", "expectedDocIds": ["seed:user-points"] },
+    { "question": "秒杀令牌有效期多久?", "expectedDocIds": ["seed:user-coupon-seckill"] },
+    { "question": "为什么抢购提示一人一单?", "expectedDocIds": ["seed:user-coupon-seckill"] },
+    { "question": "登录验证码多久过期?", "expectedDocIds": ["seed:user-account"] },
+    { "question": "商户审核通过后需要重新登录吗?", "expectedDocIds": ["seed:user-account"] },
+    { "question": "平台提供配送服务吗?", "expectedDocIds": ["seed:common-platform"] },
+    { "question": "客服的工作时间是几点?", "expectedDocIds": ["seed:common-platform"] }
+  ]
+}

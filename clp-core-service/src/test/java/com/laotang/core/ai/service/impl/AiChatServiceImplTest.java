@@ -16,9 +16,12 @@ import com.laotang.core.ai.gateway.AiChatGateway;
 import com.laotang.core.ai.gateway.ChatResult;
 import com.laotang.core.ai.mapper.AiConversationMapper;
 import com.laotang.core.ai.mapper.AiMessageMapper;
+import com.laotang.core.ai.memory.ConversationMemoryService;
 import com.laotang.core.ai.rag.KnowledgeContext;
 import com.laotang.core.ai.rag.KnowledgeRetriever;
 import com.laotang.core.ai.rag.KnowledgeSnippet;
+import com.laotang.core.ai.support.AiCircuitBreaker;
+import com.laotang.core.ai.support.ConversationLock;
 import com.laotang.core.ai.tool.AiToolFactory;
 import com.laotang.core.ai.tool.AiToolRecorder;
 import com.laotang.framework.redis.ratelimit.RedisRateLimiter;
@@ -59,6 +62,12 @@ class AiChatServiceImplTest {
     @Mock
     private KnowledgeRetriever knowledgeRetriever;
     @Mock
+    private ConversationMemoryService conversationMemory;
+    @Mock
+    private ConversationLock conversationLock;
+    @Mock
+    private AiCircuitBreaker circuitBreaker;
+    @Mock
     private RedisRateLimiter rateLimiter;
 
     private AiChatServiceImpl service;
@@ -81,6 +90,9 @@ class AiChatServiceImplTest {
                 chatGateway,
                 toolFactory,
                 knowledgeRetriever,
+                conversationMemory,
+                conversationLock,
+                circuitBreaker,
                 rateLimiter,
                 properties,
                 new ObjectMapper());
@@ -126,9 +138,7 @@ class AiChatServiceImplTest {
     @Test
     @DisplayName("正常问答:落库用户消息与助手消息,并返回 token 统计")
     void chat_happyPath() {
-        when(rateLimiter.tryAcquire(anyString(), eq(2), any())).thenReturn(true);
-        when(conversationMapper.selectById(100L)).thenReturn(conversation());
-        when(messageMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 5, false));
+        stubChatPreamble();
         when(messageMapper.insert(any(AiMessage.class))).thenAnswer(inv -> {
             AiMessage message = inv.getArgument(0);
             message.setId("USER".equals(message.getRole()) ? 200L : 201L);
@@ -148,6 +158,7 @@ class AiChatServiceImplTest {
         assertThat(response.tokensIn()).isEqualTo(30);
         assertThat(response.tokensOut()).isEqualTo(12);
         assertThat(response.sources()).isEmpty();
+        assertThat(response.degraded()).isFalse();
 
         ArgumentCaptor<AiMessage> captor = ArgumentCaptor.forClass(AiMessage.class);
         verify(messageMapper, times(2)).insert(captor.capture());
@@ -160,9 +171,7 @@ class AiChatServiceImplTest {
     @Test
     @DisplayName("工具调用记录写入 assistant 消息的 tool_calls")
     void chat_persistsToolCalls() {
-        when(rateLimiter.tryAcquire(anyString(), eq(2), any())).thenReturn(true);
-        when(conversationMapper.selectById(100L)).thenReturn(conversation());
-        when(messageMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 5, false));
+        stubChatPreamble();
         when(messageMapper.insert(any(AiMessage.class))).thenAnswer(inv -> {
             AiMessage message = inv.getArgument(0);
             message.setId("USER".equals(message.getRole()) ? 200L : 201L);
@@ -192,18 +201,18 @@ class AiChatServiceImplTest {
     @Test
     @DisplayName("检索到的资料进入模型命令,并作为 sources 返回")
     void chat_passesKnowledgeAndReturnsSources() {
-        when(rateLimiter.tryAcquire(anyString(), eq(2), any())).thenReturn(true);
-        when(conversationMapper.selectById(100L)).thenReturn(conversation());
-        when(messageMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 5, false));
+        stubChatPreamble();
         when(messageMapper.insert(any(AiMessage.class))).thenAnswer(inv -> {
             AiMessage message = inv.getArgument(0);
             message.setId("USER".equals(message.getRole()) ? 200L : 201L);
             return 1;
         });
+        when(conversationMemory.refreshSummary(any(AiConversation.class)))
+                .thenReturn("用户之前咨询过订单取消");
         when(toolFactory.create(eq(AiScope.USER), eq(1L), any())).thenReturn(List.of());
         when(knowledgeRetriever.retrieve(eq(AiScope.USER), anyString()))
                 .thenReturn(new KnowledgeContext(List.of(new KnowledgeSnippet(
-                        "下单与订单规则", "取消与超时",
+                        "seed:user-order", "下单与订单规则", "取消与超时",
                         "下单后 30 分钟未支付会自动关闭。", 0.92))));
         when(chatGateway.chat(any(AiChatCommand.class)))
                 .thenReturn(new ChatResult("30 分钟未支付会自动关闭。[1]", 50, 10));
@@ -214,9 +223,77 @@ class AiChatServiceImplTest {
                 ArgumentCaptor.forClass(AiChatCommand.class);
         verify(chatGateway).chat(commandCaptor.capture());
         assertThat(commandCaptor.getValue().knowledge().snippets()).hasSize(1);
+        assertThat(commandCaptor.getValue().summary()).isEqualTo("用户之前咨询过订单取消");
         assertThat(response.sources()).hasSize(1);
+        assertThat(response.sources().getFirst().docId()).isEqualTo("seed:user-order");
         assertThat(response.sources().getFirst().title()).isEqualTo("下单与订单规则");
         assertThat(response.sources().getFirst().score()).isEqualTo(0.92);
+    }
+
+    @Test
+    @DisplayName("同一会话并发请求返回 10005")
+    void chat_conversationBusy() {
+        when(rateLimiter.tryAcquire(anyString(), eq(2), any())).thenReturn(true);
+        when(conversationMapper.selectById(100L)).thenReturn(conversation());
+        when(conversationLock.tryLock(100L)).thenReturn(false);
+
+        BusinessException ex = catchThrowableOfType(
+                () -> service.chat(1L, 100L, "你好"), BusinessException.class);
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.AI_CONVERSATION_BUSY);
+        verify(chatGateway, never()).chat(any(AiChatCommand.class));
+        verify(conversationLock, never()).unlock(100L);
+    }
+
+    @Test
+    @DisplayName("熔断打开时不调用模型,直接返回降级话术")
+    void chat_circuitOpen_degrades() {
+        stubChatPreamble();
+        when(circuitBreaker.isOpen()).thenReturn(true);
+        when(messageMapper.insert(any(AiMessage.class))).thenAnswer(inv -> {
+            AiMessage message = inv.getArgument(0);
+            message.setId("USER".equals(message.getRole()) ? 200L : 201L);
+            return 1;
+        });
+
+        var response = service.chat(1L, 100L, "你好");
+
+        assertThat(response.degraded()).isTrue();
+        assertThat(response.content()).contains("暂时不可用");
+        verify(chatGateway, never()).chat(any(AiChatCommand.class));
+        verify(knowledgeRetriever, never()).retrieve(any(), anyString());
+        verify(conversationLock).unlock(100L);
+    }
+
+    @Test
+    @DisplayName("模型不可用时返回降级话术并落库")
+    void chat_gatewayUnavailable_degrades() {
+        stubChatPreamble();
+        when(messageMapper.insert(any(AiMessage.class))).thenAnswer(inv -> {
+            AiMessage message = inv.getArgument(0);
+            message.setId("USER".equals(message.getRole()) ? 200L : 201L);
+            return 1;
+        });
+        when(toolFactory.create(eq(AiScope.USER), eq(1L), any())).thenReturn(List.of());
+        when(knowledgeRetriever.retrieve(eq(AiScope.USER), anyString()))
+                .thenReturn(KnowledgeContext.empty());
+        when(chatGateway.chat(any(AiChatCommand.class)))
+                .thenThrow(new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE));
+
+        var response = service.chat(1L, 100L, "你好");
+
+        assertThat(response.degraded()).isTrue();
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.tokensIn()).isZero();
+        verify(messageMapper, times(2)).insert(any(AiMessage.class));
+    }
+
+    private void stubChatPreamble() {
+        when(rateLimiter.tryAcquire(anyString(), eq(2), any())).thenReturn(true);
+        when(conversationMapper.selectById(100L)).thenReturn(conversation());
+        when(conversationLock.tryLock(100L)).thenReturn(true);
+        when(messageMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 5, false));
     }
 
     @Test

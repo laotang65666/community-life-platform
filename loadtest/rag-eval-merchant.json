@@ -1,0 +1,11 @@
+{
+  "scope": "MERCHANT",
+  "cases": [
+    { "question": "审核通过后需要重新登录吗?", "expectedDocIds": ["seed:merchant-onboarding"] },
+    { "question": "待支付的订单商户需要处理吗?", "expectedDocIds": ["seed:merchant-product-order"] },
+    { "question": "店铺打烊后用户还能下单吗?", "expectedDocIds": ["seed:merchant-shop"] },
+    { "question": "今日成交额怎么计算?", "expectedDocIds": ["seed:merchant-product-order"] },
+    { "question": "一个商户可以开几家店?", "expectedDocIds": ["seed:merchant-onboarding"] },
+    { "question": "平台怎么结算?", "expectedDocIds": ["seed:merchant-product-order"] }
+  ]
+}

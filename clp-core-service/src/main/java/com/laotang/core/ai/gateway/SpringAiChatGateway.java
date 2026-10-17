@@ -2,8 +2,10 @@ package com.laotang.core.ai.gateway;
 
 import com.laotang.common.exception.BusinessException;
 import com.laotang.common.exception.ErrorCode;
+import com.laotang.core.ai.config.AiChatProperties;
 import com.laotang.core.ai.enums.AiMessageRole;
 import com.laotang.core.ai.prompt.AiPromptProvider;
+import com.laotang.core.ai.support.AiCircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -16,6 +18,11 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 基于 Spring AI 的模型调用实现。
@@ -30,9 +37,43 @@ public class SpringAiChatGateway implements AiChatGateway {
 
     private final ChatClient chatClient;
     private final AiPromptProvider promptProvider;
+    private final AiChatProperties properties;
+    private final AiCircuitBreaker circuitBreaker;
+    private final ExecutorService aiChatExecutor;
 
     @Override
     public ChatResult chat(AiChatCommand command) {
+        if (!circuitBreaker.allowRequest()) {
+            throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 服务熔断中");
+        }
+
+        Future<ChatResult> future = aiChatExecutor.submit(() -> doChat(command));
+        try {
+            ChatResult result = future.get(properties.getTimeoutMs(), TimeUnit.MILLISECONDS);
+            circuitBreaker.onSuccess();
+            return result;
+        } catch (TimeoutException ex) {
+            future.cancel(true);
+            circuitBreaker.onFailure();
+            log.warn("调用大模型超时, timeoutMs={}", properties.getTimeoutMs());
+            throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 响应超时");
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            future.cancel(true);
+            circuitBreaker.onFailure();
+            throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE);
+        } catch (ExecutionException ex) {
+            circuitBreaker.onFailure();
+            Throwable cause = ex.getCause();
+            if (cause instanceof BusinessException businessException) {
+                throw businessException;
+            }
+            log.error("调用大模型失败, scope={}", command.scope(), cause);
+            throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private ChatResult doChat(AiChatCommand command) {
         List<Message> messages = new ArrayList<>(command.history().size());
         for (ChatTurn turn : command.history()) {
             append(messages, turn);
@@ -77,19 +118,28 @@ public class SpringAiChatGateway implements AiChatGateway {
     }
 
     private String systemPrompt(AiChatCommand command) {
-        String base = promptProvider.systemPrompt(command.scope());
-        if (command.knowledge() != null && !command.knowledge().isEmpty()) {
-            return base + "\n\n" + command.knowledge().toPromptBlock();
+        StringBuilder prompt = new StringBuilder(promptProvider.systemPrompt(command.scope()));
+
+        if (command.summary() != null && !command.summary().isBlank()) {
+            prompt.append("\n\n## 历史对话摘要\n")
+                    .append(command.summary().strip())
+                    .append('\n');
         }
-        return base + """
+
+        if (command.knowledge() != null && !command.knowledge().isEmpty()) {
+            prompt.append("\n\n").append(command.knowledge().toPromptBlock());
+        } else {
+            prompt.append("""
 
 
-                ## 参考资料
-                本轮未检索到平台资料。
-                - 只回答工具查询到的事实。
-                - 涉及平台规则、流程、时间、金额时不要推测,直接建议用户联系人工客服。
-                - 不要用"通常""可能""一般"来编造平台规则。
-                """;
+                    ## 参考资料
+                    本轮未检索到平台资料。
+                    - 只回答工具查询到的事实。
+                    - 涉及平台规则、流程、时间、金额时不要推测,直接建议用户联系人工客服。
+                    - 不要用"通常""可能""一般"来编造平台规则。
+                    """);
+        }
+        return prompt.toString();
     }
 
     private void append(List<Message> messages, ChatTurn turn) {

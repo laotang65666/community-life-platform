@@ -135,7 +135,7 @@ class RagKnowledgeRetrieverTest {
         String key = RedisKey.aiRagResult(
                 "USER", TextHasher.sha256(TextHasher.normalize(query)));
         KnowledgeContext cached = new KnowledgeContext(List.of(
-                new KnowledgeSnippet("A", "章节", "缓存内容", 0.9)));
+                new KnowledgeSnippet("seed:doc-a", "A", "章节", "缓存内容", 0.9)));
         when(valueOps.get(key)).thenReturn(objectMapper.writeValueAsString(cached));
 
         KnowledgeContext context = retriever.retrieve(AiScope.USER, query);

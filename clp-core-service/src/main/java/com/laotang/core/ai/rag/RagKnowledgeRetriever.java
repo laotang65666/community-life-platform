@@ -204,6 +204,7 @@ public class RagKnowledgeRetriever implements KnowledgeRetriever {
                 }
             }
             snippets.add(new KnowledgeSnippet(
+                    hit.chunk().getDocId(),
                     hit.chunk().getTitle(),
                     hit.chunk().getSection(),
                     content,
