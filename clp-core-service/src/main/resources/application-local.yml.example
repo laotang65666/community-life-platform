@@ -20,6 +20,16 @@ clp:
     secret: your-32-byte-minimum-secret
 
   # 需要真实调用 AI 时再填
-  # ai:
-  #   openai:
-  #     api-key: sk-your-deepseek-key
+  ai:
+    # DeepSeek 走 Spring AI 的 OpenAI 兼容协议
+    # (对应 spring.ai.openai.api-key,此处仅示意)
+    # openai:
+    #   api-key: sk-your-deepseek-key
+    zhipu:
+      # 必须是完整的 {id}.{secret}
+      api-key: your-zhipu-key
+
+# 本地开发打开 SQL 日志;生产环境删掉
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl

@@ -26,10 +26,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -107,9 +110,12 @@ class ProductServiceImplTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     @DisplayName("商品不存在 -> 5001")
     void getDetail_notFound() {
         when(productMapper.selectById(99L)).thenReturn(null);
+        when(cache.getOrLoad(anyString(), eq(ProductResponse.class), any(), any()))
+                .thenAnswer(inv -> ((Supplier<ProductResponse>) inv.getArgument(3)).get());
 
         BusinessException ex = catchThrowableOfType(
                 () -> productService.getDetail(99L), BusinessException.class);

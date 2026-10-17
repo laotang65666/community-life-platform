@@ -70,14 +70,18 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     public ProductResponse getDetail(Long productId) {
-        String cacheKey = RedisKey.cacheProduct(productId);
-        ProductResponse cached = cache.get(cacheKey, ProductResponse.class);
-        if (cached != null) {
-            return cached;
-        }
+        ProductResponse response = cache.getOrLoad(
+                RedisKey.cacheProduct(productId),
+                ProductResponse.class,
+                cacheProperties.getProductTtl(),
+                () -> {
+                    Product product = productMapper.selectById(productId);
+                    return product == null ? null : ProductConverter.toResponse(product);
+                });
 
-        ProductResponse response = ProductConverter.toResponse(requireProduct(productId));
-        cache.put(cacheKey, response, cacheProperties.getProductTtl());
+        if (response == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
         return response;
     }
 

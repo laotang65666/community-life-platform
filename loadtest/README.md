@@ -179,7 +179,7 @@ set HEAP=-Xms2g -Xmx4g
 ### 6.1 Redis
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec redis redis-cli -a 879269 get "clp:seckill:stock:{voucherId}"
+MSYS_NO_PATHCONV=1 docker exec redis redis-cli -a "$REDIS_PASSWORD" get "clp:seckill:stock:{voucherId}"
 ```
 
 期望:`0`,**绝不能是负数**。

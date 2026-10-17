@@ -63,18 +63,18 @@ public class ShopServiceImpl implements IShopService {
 
     @Override
     public ShopResponse getDetail(Long shopId) {
-        String cacheKey = RedisKey.cacheShop(shopId);
-        ShopResponse cached = cache.get(cacheKey, ShopResponse.class);
-        if (cached != null) {
-            return cached;
-        }
+        ShopResponse response = cache.getOrLoad(
+                RedisKey.cacheShop(shopId),
+                ShopResponse.class,
+                cacheProperties.getShopTtl(),
+                () -> {
+                    Shop shop = shopMapper.selectById(shopId);
+                    return shop == null ? null : ShopConverter.toResponse(shop);
+                });
 
-        Shop shop = shopMapper.selectById(shopId);
-        if (shop == null) {
+        if (response == null) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
         }
-        ShopResponse response = ShopConverter.toResponse(shop);
-        cache.put(cacheKey, response, cacheProperties.getShopTtl());
         return response;
     }
 

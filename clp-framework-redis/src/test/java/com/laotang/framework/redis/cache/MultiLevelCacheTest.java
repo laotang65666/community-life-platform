@@ -11,11 +11,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -36,6 +38,7 @@ class MultiLevelCacheTest {
     void setUp() {
         CacheProperties properties = new CacheProperties();
         properties.setLocalTtl(Duration.ofMinutes(5));
+        properties.setNullTtl(Duration.ofMinutes(2));
         properties.setMaxSize(100);
         cache = new MultiLevelCache(redis, objectMapper, properties);
         lenient().when(redis.opsForValue()).thenReturn(valueOps);
@@ -99,6 +102,46 @@ class MultiLevelCacheTest {
 
         verify(valueOps, never()).set(anyString(), anyString(), eq(Duration.ofMinutes(10)));
         verify(redis, never()).delete(anyString());
+    }
+
+    @Test
+    @DisplayName("getOrLoad 未命中时回源并写入缓存")
+    void getOrLoad_miss_loadsAndCaches() {
+        when(valueOps.get("k")).thenReturn(null);
+        Sample sample = new Sample("d", 4);
+
+        Sample result = cache.getOrLoad(
+                "k", Sample.class, Duration.ofMinutes(10), () -> sample);
+
+        assertThat(result).isEqualTo(sample);
+        verify(valueOps).set(eq("k"), anyString(), eq(Duration.ofMinutes(10)));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("getOrLoad 返回 null 时缓存空标记,后续不再回源")
+    void getOrLoad_null_cachesSentinel() {
+        when(valueOps.get("k")).thenReturn(null);
+        Supplier<Sample> loader = mock(Supplier.class);
+        when(loader.get()).thenReturn(null);
+
+        assertThat(cache.getOrLoad("k", Sample.class, Duration.ofMinutes(10), loader)).isNull();
+        verify(valueOps).set("k", "__NULL__", Duration.ofMinutes(2));
+
+        // 第二次命中本地空标记,不再调用 loader
+        assertThat(cache.getOrLoad("k", Sample.class, Duration.ofMinutes(10), loader)).isNull();
+        verify(loader, times(1)).get();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("Redis 中已有空标记时直接返回 null")
+    void getOrLoad_redisNullMarker() {
+        when(valueOps.get("k")).thenReturn("__NULL__");
+        Supplier<Sample> loader = mock(Supplier.class);
+
+        assertThat(cache.getOrLoad("k", Sample.class, Duration.ofMinutes(10), loader)).isNull();
+        verify(loader, never()).get();
     }
 
     private record Sample(String name, int value) {

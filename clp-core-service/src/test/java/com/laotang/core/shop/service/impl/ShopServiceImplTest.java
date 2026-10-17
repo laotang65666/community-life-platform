@@ -8,6 +8,7 @@ import com.laotang.core.shop.mapper.ShopTypeMapper;
 import com.laotang.framework.redis.cache.CacheProperties;
 import com.laotang.framework.redis.cache.MultiLevelCache;
 import com.laotang.parameter.shop.request.UpdateShopRequest;
+import com.laotang.parameter.shop.response.ShopResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,9 +16,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.function.Supplier;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,15 +43,37 @@ class ShopServiceImplTest {
     private ShopServiceImpl shopService;
 
     @Test
+    @SuppressWarnings("unchecked")
     @DisplayName("店铺不存在 -> 4006")
     void getDetail_notFound() {
         when(shopMapper.selectById(99L)).thenReturn(null);
+        when(cache.getOrLoad(anyString(), eq(ShopResponse.class), any(), any()))
+                .thenAnswer(inv -> ((Supplier<ShopResponse>) inv.getArgument(3)).get());
 
         BusinessException ex = catchThrowableOfType(
                 () -> shopService.getDetail(99L), BusinessException.class);
 
         assertThat(ex).isNotNull();
         assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SHOP_NOT_FOUND);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("店铺详情:缓存未命中时回源")
+    void getDetail_success() {
+        Shop shop = new Shop();
+        shop.setId(10L);
+        shop.setMerchantId(1L);
+        shop.setName("测试店铺");
+        shop.setStatus("OPEN");
+        when(shopMapper.selectById(10L)).thenReturn(shop);
+        when(cache.getOrLoad(anyString(), eq(ShopResponse.class), any(), any()))
+                .thenAnswer(inv -> ((Supplier<ShopResponse>) inv.getArgument(3)).get());
+
+        ShopResponse response = shopService.getDetail(10L);
+
+        assertThat(response.id()).isEqualTo("10");
+        assertThat(response.name()).isEqualTo("测试店铺");
     }
 
     @Test

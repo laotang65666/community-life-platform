@@ -70,7 +70,7 @@ mybatis-plus:
   type-aliases-package: com.laotang.core.**.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 本地开发用,上线删掉
+    # SQL 日志只在 application-local.yml 打开,避免生产环境刷屏
 
 springdoc:
   api-docs:
@@ -101,6 +101,8 @@ clp:
     product-ttl: 60s
     # 本地 Caffeine TTL,用于限制多节点脏读窗口
     local-ttl: 60s
+    # 不存在的 ID 缓存空标记,防缓存穿透
+    null-ttl: 2m
     max-size: 10000
   jwt:
     secret: ${JWT_SECRET:}
