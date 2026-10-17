@@ -15,6 +15,8 @@ public interface IMerchantService {
 
     MerchantResponse getMyMerchant(Long userId);
 
+    Merchant getById(Long merchantId);
+
     void updateMyMerchant(Long userId, UpdateMerchantRequest request);
 
     PageResult<MerchantResponse> listApplications(String status, long page, long size);

@@ -84,6 +84,11 @@ public class MerchantServiceImpl implements IMerchantService {
     }
 
     @Override
+    public Merchant getById(Long merchantId) {
+        return merchantMapper.selectById(merchantId);
+    }
+
+    @Override
     public void updateMyMerchant(Long userId, UpdateMerchantRequest request) {
         Merchant merchant = findLatestByUserId(userId);
         if (merchant == null) {

@@ -7,6 +7,9 @@ import com.laotang.common.exception.ErrorCode;
 import com.laotang.common.result.PageResult;
 import com.laotang.core.idempotency.entity.IdempotencyRecord;
 import com.laotang.core.idempotency.service.IdempotencyService;
+import com.laotang.core.merchant.entity.Merchant;
+import com.laotang.core.merchant.service.IMerchantService;
+import com.laotang.core.notification.service.INotificationService;
 import com.laotang.core.order.config.OrderProperties;
 import com.laotang.core.order.converter.OrderConverter;
 import com.laotang.core.order.entity.Order;
@@ -48,6 +51,8 @@ public class OrderServiceImpl implements IOrderService {
     private final RedissonDelayQueue delayQueue;
     private final OrderProperties orderProperties;
     private final IShopService shopService;
+    private final IMerchantService merchantService;
+    private final INotificationService notificationService;
 
     @Override
     public OrderResponse create(Long userId, String idempotencyKey, CreateOrderRequest request) {
@@ -85,6 +90,8 @@ public class OrderServiceImpl implements IOrderService {
                     String.valueOf(created.order().getId()),
                     orderProperties.timeout().toMillis(),
                     TimeUnit.MILLISECONDS);
+
+            notifyMerchant(created.order());
 
             return OrderConverter.toResponse(created.order(), created.items());
         } catch (RuntimeException e) {
@@ -149,11 +156,39 @@ public class OrderServiceImpl implements IOrderService {
     @Override
     public void accept(Long orderId, Long merchantId) {
         orderTxService.accept(orderId, merchantId);
+        notifyUser(orderId, "ORDER_ACCEPTED", "订单已接单", "商户已接单,请留意配送");
     }
 
     @Override
     public void complete(Long orderId, Long merchantId) {
         orderTxService.complete(orderId, merchantId);
+        notifyUser(orderId, "ORDER_COMPLETED", "订单已完成", "订单已完成,感谢您的光临");
+    }
+
+    private void notifyMerchant(Order order) {
+        Shop shop = shopService.getById(order.getShopId());
+        if (shop == null) {
+            return;
+        }
+        Merchant merchant = merchantService.getById(shop.getMerchantId());
+        if (merchant == null) {
+            return;
+        }
+        notificationService.send(
+                merchant.getUserId(),
+                "ORDER_CREATED",
+                "新订单",
+                "您有一笔新订单,请及时处理",
+                String.valueOf(order.getId()));
+    }
+
+    private void notifyUser(Long orderId, String type, String title, String content) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            return;
+        }
+        notificationService.send(
+                order.getUserId(), type, title, content, String.valueOf(orderId));
     }
 
     @Override

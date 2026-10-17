@@ -74,7 +74,12 @@ public enum ErrorCode {
     // ---------- 内容社区 ----------
     BLOG_NOT_FOUND(8001, "笔记不存在", 404),
     BLOG_HIDDEN(8002, "笔记已被隐藏", 403),
-    CONTENT_NOT_OWNER(8003, "只能操作自己的内容", 403);
+    CONTENT_NOT_OWNER(8003, "只能操作自己的内容", 403),
+
+    // ---------- 签到 / 积分 ----------
+    ALREADY_SIGNED(9001, "今日已签到", 409),
+    POINTS_NOT_ENOUGH(9002, "积分不足", 409),
+    NOTIFICATION_NOT_FOUND(9003, "通知不存在", 404);
 
     private final int code;
     private final String message;

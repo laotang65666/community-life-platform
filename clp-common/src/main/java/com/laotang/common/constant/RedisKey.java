@@ -1,5 +1,8 @@
 package com.laotang.common.constant;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 /**
  * Redis Key 统一拼接。业务代码禁止手写 key 字符串。
  */
@@ -24,6 +27,12 @@ public final class RedisKey {
     public static final String USER_FEED = PREFIX + "feed:user:";
     public static final String USER_OUTBOX = PREFIX + "outbox:user:";
     public static final String USER_FOLLOWERS = PREFIX + "user:followers:";
+    public static final String SIGN = PREFIX + "sign:";
+
+    /**
+     * WebSocket 跨节点广播的 Redis Pub/Sub 频道。
+     */
+    public static final String NOTIFY_CHANNEL = PREFIX + "notify:channel";
 
     private RedisKey() {
     }
@@ -86,5 +95,9 @@ public final class RedisKey {
 
     public static String userFollowers(Long userId) {
         return USER_FOLLOWERS + userId;
+    }
+
+    public static String sign(Long userId, LocalDate date) {
+        return SIGN + userId + ":" + date.format(DateTimeFormatter.ofPattern("yyyyMM"));
     }
 }

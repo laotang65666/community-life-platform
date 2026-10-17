@@ -6,7 +6,9 @@ import com.laotang.common.enums.RoleEnum;
 import com.laotang.common.result.PageResult;
 import com.laotang.common.result.Result;
 import com.laotang.common.util.PageUtils;
+import com.laotang.core.merchant.entity.Merchant;
 import com.laotang.core.merchant.service.IMerchantService;
+import com.laotang.core.notification.service.INotificationService;
 import com.laotang.parameter.merchant.request.ApproveMerchantRequest;
 import com.laotang.parameter.merchant.request.RejectMerchantRequest;
 import com.laotang.parameter.merchant.response.MerchantResponse;
@@ -33,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminMerchantController {
 
     private final IMerchantService merchantService;
+    private final INotificationService notificationService;
 
     @Operation(summary = "商户申请列表")
     @GetMapping
@@ -51,6 +54,7 @@ public class AdminMerchantController {
     public Result<Void> approve(@PathVariable("merchantId") Long merchantId,
                                 @Valid @RequestBody ApproveMerchantRequest request) {
         merchantService.approve(merchantId, UserContext.getUserId(), request.typeId());
+        notifyAudit(merchantId, true, null);
         return Result.ok();
     }
 
@@ -59,6 +63,20 @@ public class AdminMerchantController {
     public Result<Void> reject(@PathVariable("merchantId") Long merchantId,
                                @Valid @RequestBody RejectMerchantRequest request) {
         merchantService.reject(merchantId, UserContext.getUserId(), request.reason());
+        notifyAudit(merchantId, false, request.reason());
         return Result.ok();
+    }
+
+    private void notifyAudit(Long merchantId, boolean approved, String reason) {
+        Merchant merchant = merchantService.getById(merchantId);
+        if (merchant == null) {
+            return;
+        }
+        notificationService.send(
+                merchant.getUserId(),
+                "MERCHANT_AUDIT",
+                approved ? "入驻审核通过" : "入驻审核未通过",
+                approved ? "您的入驻申请已通过" : "驳回原因:" + reason,
+                String.valueOf(merchantId));
     }
 }

@@ -3,6 +3,7 @@ package com.laotang.core.marketing.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.laotang.core.marketing.service.SeckillOrderConsumeService;
+import com.laotang.core.notification.service.INotificationService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public class SeckillOrderConsumer {
 
     private final ObjectMapper objectMapper;
     private final SeckillOrderConsumeService consumeService;
+    private final INotificationService notificationService;
 
     @KafkaListener(
             topics = "clp-seckill-order",
@@ -42,6 +44,12 @@ public class SeckillOrderConsumer {
 
         try {
             consumeService.consume(message);
+            notificationService.send(
+                    message.userId(),
+                    "SECKILL_RESULT",
+                    "秒杀成功",
+                    "您已成功抢购,订单号:" + message.orderNo(),
+                    message.orderNo());
             ack.acknowledge();
         } catch (Exception e) {
             log.error("消费秒杀消息失败 orderNo={}", message.orderNo(), e);
