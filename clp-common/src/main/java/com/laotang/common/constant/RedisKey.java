@@ -17,6 +17,8 @@ public final class RedisKey {
     public static final String SECKILL_USERS = PREFIX + "seckill:users:";
     public static final String SECKILL_TOKEN = PREFIX + "seckill:token:";
     public static final String SECKILL_TOKEN_LIMIT = PREFIX + "seckill:token-limit:";
+    public static final String SECKILL_VOUCHER = PREFIX + "seckill:voucher:";
+    public static final String SECKILL_IDEM = PREFIX + "idem:seckill:";
 
     private RedisKey() {
     }
@@ -55,5 +57,13 @@ public final class RedisKey {
 
     public static String seckillTokenLimit(Long userId, Long voucherId) {
         return SECKILL_TOKEN_LIMIT + userId + ":" + voucherId;
+    }
+
+    public static String seckillVoucher(Long voucherId) {
+        return SECKILL_VOUCHER + voucherId;
+    }
+
+    public static String seckillIdempotency(Long userId, String idemKey) {
+        return SECKILL_IDEM + userId + ":" + idemKey;
     }
 }

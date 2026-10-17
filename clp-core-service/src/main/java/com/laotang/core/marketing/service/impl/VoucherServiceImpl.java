@@ -14,6 +14,7 @@ import com.laotang.core.marketing.enums.VoucherType;
 import com.laotang.core.marketing.mapper.SeckillVoucherMapper;
 import com.laotang.core.marketing.mapper.VoucherMapper;
 import com.laotang.core.marketing.service.IVoucherService;
+import com.laotang.core.marketing.support.SeckillVoucherCache;
 import com.laotang.core.shop.entity.Shop;
 import com.laotang.core.shop.service.IShopService;
 import com.laotang.parameter.marketing.request.CreateVoucherRequest;
@@ -37,6 +38,7 @@ public class VoucherServiceImpl implements IVoucherService {
     private final SeckillVoucherMapper seckillVoucherMapper;
     private final IShopService shopService;
     private final StringRedisTemplate redis;
+    private final SeckillVoucherCache voucherCache;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -76,7 +78,8 @@ public class VoucherServiceImpl implements IVoucherService {
         seckill.setEndTime(request.endTime());
         seckillVoucherMapper.insert(seckill);
 
-        // 预热 Redis 库存;清空已购用户集合
+        // 预热 Redis:券信息 + 库存;清空已购用户集合
+        voucherCache.put(voucher);
         redis.opsForValue().set(RedisKey.seckillStock(voucher.getId()), String.valueOf(request.stock()));
         redis.delete(RedisKey.seckillUsers(voucher.getId()));
 

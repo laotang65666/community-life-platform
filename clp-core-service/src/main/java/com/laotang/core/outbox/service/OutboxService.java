@@ -85,8 +85,11 @@ public class OutboxService {
                 kafkaTemplate.send(message.getTopic(), message.getMessageId(), message.getPayload())
                         .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
+                // 条件更新:只有仍是 PENDING 才改成 SENT。
+                // 否则消费者可能已经把状态改成 ACKED,这里不能覆盖回 SENT。
                 outboxMessageMapper.update(null, new LambdaUpdateWrapper<OutboxMessage>()
                         .eq(OutboxMessage::getId, message.getId())
+                        .eq(OutboxMessage::getStatus, PENDING)
                         .set(OutboxMessage::getStatus, SENT)
                         .set(OutboxMessage::getNextRetryAt, null));
             } catch (Exception e) {
@@ -96,8 +99,10 @@ public class OutboxService {
                 String status = retryCount >= MAX_RETRY ? FAILED : PENDING;
                 long backoffSeconds = Math.min(300L, 1L << Math.min(retryCount, 8));
 
+                // 同理:失败回写也不能覆盖消费者已经写入的 ACKED
                 outboxMessageMapper.update(null, new LambdaUpdateWrapper<OutboxMessage>()
                         .eq(OutboxMessage::getId, message.getId())
+                        .eq(OutboxMessage::getStatus, PENDING)
                         .set(OutboxMessage::getRetryCount, retryCount)
                         .set(OutboxMessage::getStatus, status)
                         .set(OutboxMessage::getNextRetryAt, LocalDateTime.now().plusSeconds(backoffSeconds)));

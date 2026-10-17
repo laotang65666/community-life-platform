@@ -47,6 +47,8 @@ class VoucherServiceImplTest {
     private StringRedisTemplate redis;
     @Mock
     private ValueOperations<String, String> valueOps;
+    @Mock
+    private com.laotang.core.marketing.support.SeckillVoucherCache voucherCache;
     @InjectMocks
     private VoucherServiceImpl voucherService;
 

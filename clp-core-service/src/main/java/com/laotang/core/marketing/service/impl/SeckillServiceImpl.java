@@ -1,24 +1,24 @@
 package com.laotang.core.marketing.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.laotang.common.constant.RedisKey;
 import com.laotang.common.exception.BusinessException;
 import com.laotang.common.exception.ErrorCode;
-import com.laotang.core.idempotency.entity.IdempotencyRecord;
-import com.laotang.core.idempotency.service.IdempotencyService;
-import com.laotang.core.marketing.entity.Voucher;
+import com.laotang.core.idempotency.service.RedisIdempotencyService;
+import com.laotang.core.marketing.converter.VoucherConverter;
 import com.laotang.core.marketing.entity.VoucherOrder;
 import com.laotang.core.marketing.kafka.SeckillOrderMessage;
-import com.laotang.core.marketing.mapper.VoucherMapper;
 import com.laotang.core.marketing.mapper.VoucherOrderMapper;
 import com.laotang.core.marketing.service.ISeckillService;
+import com.laotang.core.marketing.support.SeckillVoucherCache;
+import com.laotang.core.marketing.support.SeckillVoucherCache.VoucherInfo;
 import com.laotang.core.outbox.service.OutboxService;
 import com.laotang.framework.redis.ratelimit.RedisRateLimiter;
 import com.laotang.id.SnowflakeIdGenerator;
 import com.laotang.parameter.marketing.response.SeckillOrderResponse;
 import com.laotang.parameter.marketing.response.SeckillTokenResponse;
 import com.laotang.parameter.marketing.response.VoucherOrderResponse;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -26,14 +26,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * 秒杀服务实现。
  *
- * <p>核心链路:令牌 → Lua 原子扣减 → 写 Outbox → Kafka 异步落库。</p>
+ * <p>性能优化后的路径:</p>
+ * <pre>
+ * 1. Redis SETNX 幂等抢占(不写数据库)
+ * 2. Redis Hash 读取券信息(不查数据库)
+ * 3. Redis + Lua 原子扣减
+ * 4. 只有成功请求才写一次 Outbox
+ * </pre>
  */
 @Service
 public class SeckillServiceImpl implements ISeckillService {
@@ -42,33 +47,34 @@ public class SeckillServiceImpl implements ISeckillService {
     private static final String BIZ_TYPE = "SECKILL_ORDER";
 
     private static final Duration TOKEN_TTL = Duration.ofSeconds(60);
+    private static final Duration IDEM_TTL = Duration.ofHours(24);
     private static final int TOKEN_RATE_LIMIT = 5;
     private static final Duration TOKEN_RATE_WINDOW = Duration.ofSeconds(1);
 
-    private final VoucherMapper voucherMapper;
     private final VoucherOrderMapper voucherOrderMapper;
     private final StringRedisTemplate redis;
     private final RedisRateLimiter rateLimiter;
-    private final IdempotencyService idempotencyService;
+    private final RedisIdempotencyService redisIdempotency;
+    private final SeckillVoucherCache voucherCache;
     private final OutboxService outboxService;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ObjectMapper objectMapper;
     private final DefaultRedisScript<Long> seckillScript;
 
-    public SeckillServiceImpl(VoucherMapper voucherMapper,
-                              VoucherOrderMapper voucherOrderMapper,
+    public SeckillServiceImpl(VoucherOrderMapper voucherOrderMapper,
                               StringRedisTemplate redis,
                               RedisRateLimiter rateLimiter,
-                              IdempotencyService idempotencyService,
+                              RedisIdempotencyService redisIdempotency,
+                              SeckillVoucherCache voucherCache,
                               OutboxService outboxService,
                               SnowflakeIdGenerator snowflakeIdGenerator,
                               ObjectMapper objectMapper,
                               @Qualifier("seckillScript") DefaultRedisScript<Long> seckillScript) {
-        this.voucherMapper = voucherMapper;
         this.voucherOrderMapper = voucherOrderMapper;
         this.redis = redis;
         this.rateLimiter = rateLimiter;
-        this.idempotencyService = idempotencyService;
+        this.redisIdempotency = redisIdempotency;
+        this.voucherCache = voucherCache;
         this.outboxService = outboxService;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.objectMapper = objectMapper;
@@ -77,7 +83,7 @@ public class SeckillServiceImpl implements ISeckillService {
 
     @Override
     public SeckillTokenResponse createToken(Long userId, Long voucherId) {
-        Voucher voucher = requireVoucher(voucherId);
+        VoucherInfo voucher = voucherCache.get(voucherId);
         checkTime(voucher);
 
         if (!rateLimiter.tryAcquire(
@@ -102,28 +108,26 @@ public class SeckillServiceImpl implements ISeckillService {
             throw new BusinessException(ErrorCode.PARAM_INVALID, "缺少 Idempotency-Key");
         }
 
-        IdempotencyRecord acquired = idempotencyService.tryAcquire(userId, idempotencyKey, BIZ_TYPE);
-        if (acquired == null) {
-            IdempotencyRecord existing = idempotencyService.find(userId, idempotencyKey);
+        String idemKey = RedisKey.seckillIdempotency(userId, idempotencyKey);
+        if (!redisIdempotency.tryAcquire(idemKey, IDEM_TTL)) {
+            String existing = redisIdempotency.get(idemKey);
             if (existing == null) {
                 throw new BusinessException(ErrorCode.REQUEST_PROCESSING);
             }
-            if (IdempotencyService.SUCCESS.equals(existing.getStatus())) {
-                return new SeckillOrderResponse(existing.getBizId(), "PROCESSING");
+            if (!RedisIdempotencyService.PROCESSING.equals(existing)) {
+                return new SeckillOrderResponse(existing, "PROCESSING");
             }
-            if (IdempotencyService.PROCESSING.equals(existing.getStatus())) {
-                throw new BusinessException(ErrorCode.REQUEST_PROCESSING);
-            }
-            // FAILED:释放后重试一次
-            idempotencyService.release(existing.getId());
-            acquired = idempotencyService.tryAcquire(userId, idempotencyKey, BIZ_TYPE);
-            if (acquired == null) {
-                throw new BusinessException(ErrorCode.REQUEST_PROCESSING);
-            }
+            throw new BusinessException(ErrorCode.REQUEST_PROCESSING);
         }
 
-        Voucher voucher = requireVoucher(voucherId);
-        checkTime(voucher);
+        VoucherInfo voucher;
+        try {
+            voucher = voucherCache.get(voucherId);
+            checkTime(voucher);
+        } catch (RuntimeException e) {
+            redisIdempotency.release(idemKey);
+            throw e;
+        }
 
         Long result;
         try {
@@ -135,13 +139,13 @@ public class SeckillServiceImpl implements ISeckillService {
                             RedisKey.seckillToken(token)),
                     String.valueOf(userId));
         } catch (Exception e) {
-            idempotencyService.release(acquired.getId());
+            redisIdempotency.release(idemKey);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
 
         long code = result == null ? -1 : result;
         if (code != 0) {
-            idempotencyService.release(acquired.getId());
+            redisIdempotency.release(idemKey);
             throw mapLuaResult(code);
         }
 
@@ -149,20 +153,20 @@ public class SeckillServiceImpl implements ISeckillService {
         String messageId = UUID.randomUUID().toString();
         SeckillOrderMessage message = new SeckillOrderMessage(
                 messageId, orderNo, userId, voucherId,
-                voucher.getShopId(), voucher.getPayValue(), System.currentTimeMillis());
+                voucher.shopId(), voucher.payValue(), System.currentTimeMillis());
 
         try {
             String payload = objectMapper.writeValueAsString(message);
             outboxService.enqueue(SECKILL_TOPIC, BIZ_TYPE, orderNo, payload, messageId);
         } catch (Exception e) {
-            // 写 Outbox 失败:补偿 Redis,恢复库存和用户标记,允许用户重试
+            // 写 Outbox 失败:补偿 Redis,恢复库存和用户标记
             redis.opsForValue().increment(RedisKey.seckillStock(voucherId));
             redis.opsForSet().remove(RedisKey.seckillUsers(voucherId), String.valueOf(userId));
-            idempotencyService.release(acquired.getId());
+            redisIdempotency.release(idemKey);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "秒杀受理失败,请重试");
         }
 
-        idempotencyService.markSuccess(acquired.getId(), orderNo);
+        redisIdempotency.markSuccess(idemKey, orderNo, IDEM_TTL);
         return new SeckillOrderResponse(orderNo, "PROCESSING");
     }
 
@@ -171,7 +175,7 @@ public class SeckillServiceImpl implements ISeckillService {
         VoucherOrder order = voucherOrderMapper.selectOne(new LambdaQueryWrapper<VoucherOrder>()
                 .eq(VoucherOrder::getVoucherId, voucherId)
                 .eq(VoucherOrder::getUserId, userId));
-        return order == null ? null : com.laotang.core.marketing.converter.VoucherConverter.toOrderResponse(order);
+        return order == null ? null : VoucherConverter.toOrderResponse(order);
     }
 
     private BusinessException mapLuaResult(long code) {
@@ -183,20 +187,12 @@ public class SeckillServiceImpl implements ISeckillService {
         };
     }
 
-    private Voucher requireVoucher(Long voucherId) {
-        Voucher voucher = voucherMapper.selectById(voucherId);
-        if (voucher == null) {
-            throw new BusinessException(ErrorCode.VOUCHER_NOT_FOUND);
-        }
-        return voucher;
-    }
-
-    private void checkTime(Voucher voucher) {
-        LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(voucher.getBeginTime())) {
+    private void checkTime(VoucherInfo voucher) {
+        long now = System.currentTimeMillis();
+        if (now < voucher.beginAt()) {
             throw new BusinessException(ErrorCode.SECKILL_NOT_STARTED);
         }
-        if (now.isAfter(voucher.getEndTime())) {
+        if (now > voucher.endAt()) {
             throw new BusinessException(ErrorCode.SECKILL_ENDED);
         }
     }
