@@ -40,7 +40,7 @@ public class SpringAiChatGateway implements AiChatGateway {
 
         try {
             ChatClient.ChatClientRequestSpec spec = chatClient.prompt()
-                    .system(promptProvider.systemPrompt(command.scope()))
+                    .system(systemPrompt(command))
                     .messages(messages)
                     .user(command.userContent());
 
@@ -74,6 +74,22 @@ public class SpringAiChatGateway implements AiChatGateway {
                     command.scope(), command.history().size(), ex);
             throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE);
         }
+    }
+
+    private String systemPrompt(AiChatCommand command) {
+        String base = promptProvider.systemPrompt(command.scope());
+        if (command.knowledge() != null && !command.knowledge().isEmpty()) {
+            return base + "\n\n" + command.knowledge().toPromptBlock();
+        }
+        return base + """
+
+
+                ## 参考资料
+                本轮未检索到平台资料。
+                - 只回答工具查询到的事实。
+                - 涉及平台规则、流程、时间、金额时不要推测,直接建议用户联系人工客服。
+                - 不要用"通常""可能""一般"来编造平台规则。
+                """;
     }
 
     private void append(List<Message> messages, ChatTurn turn) {

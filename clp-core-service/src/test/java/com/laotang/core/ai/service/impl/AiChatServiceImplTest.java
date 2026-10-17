@@ -16,6 +16,9 @@ import com.laotang.core.ai.gateway.AiChatGateway;
 import com.laotang.core.ai.gateway.ChatResult;
 import com.laotang.core.ai.mapper.AiConversationMapper;
 import com.laotang.core.ai.mapper.AiMessageMapper;
+import com.laotang.core.ai.rag.KnowledgeContext;
+import com.laotang.core.ai.rag.KnowledgeRetriever;
+import com.laotang.core.ai.rag.KnowledgeSnippet;
 import com.laotang.core.ai.tool.AiToolFactory;
 import com.laotang.core.ai.tool.AiToolRecorder;
 import com.laotang.framework.redis.ratelimit.RedisRateLimiter;
@@ -54,6 +57,8 @@ class AiChatServiceImplTest {
     @Mock
     private AiToolFactory toolFactory;
     @Mock
+    private KnowledgeRetriever knowledgeRetriever;
+    @Mock
     private RedisRateLimiter rateLimiter;
 
     private AiChatServiceImpl service;
@@ -75,6 +80,7 @@ class AiChatServiceImplTest {
                 messageMapper,
                 chatGateway,
                 toolFactory,
+                knowledgeRetriever,
                 rateLimiter,
                 properties,
                 new ObjectMapper());
@@ -129,6 +135,8 @@ class AiChatServiceImplTest {
             return 1;
         });
         when(toolFactory.create(eq(AiScope.USER), eq(1L), any())).thenReturn(List.of());
+        when(knowledgeRetriever.retrieve(eq(AiScope.USER), anyString()))
+                .thenReturn(KnowledgeContext.empty());
         when(chatGateway.chat(any(AiChatCommand.class)))
                 .thenReturn(new ChatResult("进入订单详情页,点击取消订单。", 30, 12));
 
@@ -139,6 +147,7 @@ class AiChatServiceImplTest {
         assertThat(response.content()).isEqualTo("进入订单详情页,点击取消订单。");
         assertThat(response.tokensIn()).isEqualTo(30);
         assertThat(response.tokensOut()).isEqualTo(12);
+        assertThat(response.sources()).isEmpty();
 
         ArgumentCaptor<AiMessage> captor = ArgumentCaptor.forClass(AiMessage.class);
         verify(messageMapper, times(2)).insert(captor.capture());
@@ -165,6 +174,8 @@ class AiChatServiceImplTest {
                     recorder.record("queryMyOrders", "limit=5", true, "ok", 12);
                     return List.of();
                 });
+        when(knowledgeRetriever.retrieve(eq(AiScope.USER), anyString()))
+                .thenReturn(KnowledgeContext.empty());
         when(chatGateway.chat(any(AiChatCommand.class)))
                 .thenReturn(new ChatResult("你有 3 笔订单。", 100, 20));
 
@@ -176,6 +187,36 @@ class AiChatServiceImplTest {
         assertThat(assistant.getToolCalls())
                 .contains("queryMyOrders")
                 .contains("\"success\":true");
+    }
+
+    @Test
+    @DisplayName("检索到的资料进入模型命令,并作为 sources 返回")
+    void chat_passesKnowledgeAndReturnsSources() {
+        when(rateLimiter.tryAcquire(anyString(), eq(2), any())).thenReturn(true);
+        when(conversationMapper.selectById(100L)).thenReturn(conversation());
+        when(messageMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 5, false));
+        when(messageMapper.insert(any(AiMessage.class))).thenAnswer(inv -> {
+            AiMessage message = inv.getArgument(0);
+            message.setId("USER".equals(message.getRole()) ? 200L : 201L);
+            return 1;
+        });
+        when(toolFactory.create(eq(AiScope.USER), eq(1L), any())).thenReturn(List.of());
+        when(knowledgeRetriever.retrieve(eq(AiScope.USER), anyString()))
+                .thenReturn(new KnowledgeContext(List.of(new KnowledgeSnippet(
+                        "下单与订单规则", "取消与超时",
+                        "下单后 30 分钟未支付会自动关闭。", 0.92))));
+        when(chatGateway.chat(any(AiChatCommand.class)))
+                .thenReturn(new ChatResult("30 分钟未支付会自动关闭。[1]", 50, 10));
+
+        var response = service.chat(1L, 100L, "订单多久超时?");
+
+        ArgumentCaptor<AiChatCommand> commandCaptor =
+                ArgumentCaptor.forClass(AiChatCommand.class);
+        verify(chatGateway).chat(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().knowledge().snippets()).hasSize(1);
+        assertThat(response.sources()).hasSize(1);
+        assertThat(response.sources().getFirst().title()).isEqualTo("下单与订单规则");
+        assertThat(response.sources().getFirst().score()).isEqualTo(0.92);
     }
 
     @Test

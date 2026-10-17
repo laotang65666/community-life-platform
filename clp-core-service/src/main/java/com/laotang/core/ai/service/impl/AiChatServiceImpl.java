@@ -25,11 +25,14 @@ import com.laotang.core.ai.tool.AiToolFactory;
 import com.laotang.core.ai.tool.AiToolRecorder;
 import com.laotang.core.ai.mapper.AiConversationMapper;
 import com.laotang.core.ai.mapper.AiMessageMapper;
+import com.laotang.core.ai.rag.KnowledgeContext;
+import com.laotang.core.ai.rag.KnowledgeRetriever;
 import com.laotang.core.ai.service.IAiChatService;
 import com.laotang.framework.redis.ratelimit.RedisRateLimiter;
 import com.laotang.parameter.ai.response.ChatReplyResponse;
 import com.laotang.parameter.ai.response.ConversationResponse;
 import com.laotang.parameter.ai.response.MessageResponse;
+import com.laotang.parameter.ai.response.SourceResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -60,6 +63,7 @@ public class AiChatServiceImpl implements IAiChatService {
     private final AiMessageMapper messageMapper;
     private final AiChatGateway chatGateway;
     private final AiToolFactory toolFactory;
+    private final KnowledgeRetriever knowledgeRetriever;
     private final RedisRateLimiter rateLimiter;
     private final AiChatProperties properties;
     private final ObjectMapper objectMapper;
@@ -136,10 +140,12 @@ public class AiChatServiceImpl implements IAiChatService {
         messageMapper.insert(userMessage);
         touchConversation(conversation, question, now);
 
+        KnowledgeContext knowledge = knowledgeRetriever.retrieve(scope, question);
+
         AiToolRecorder recorder = new AiToolRecorder();
         List<Object> tools = toolFactory.create(scope, userId, recorder);
         ChatResult result = chatGateway.chat(
-                new AiChatCommand(scope, history, question, tools));
+                new AiChatCommand(scope, history, question, tools, knowledge));
 
         LocalDateTime repliedAt = LocalDateTime.now();
         AiMessage assistantMessage = buildMessage(
@@ -152,13 +158,21 @@ public class AiChatServiceImpl implements IAiChatService {
         messageMapper.insert(assistantMessage);
         markReplied(conversationId, repliedAt);
 
+        List<SourceResponse> sources = knowledge.snippets().stream()
+                .map(snippet -> new SourceResponse(
+                        snippet.title(),
+                        snippet.section(),
+                        Math.round(snippet.score() * 1000) / 1000.0))
+                .toList();
+
         return new ChatReplyResponse(
                 String.valueOf(conversationId),
                 String.valueOf(assistantMessage.getId()),
                 result.content(),
                 result.tokensIn(),
                 result.tokensOut(),
-                DateTimeUtils.toIso(assistantMessage.getCreatedAt()));
+                DateTimeUtils.toIso(assistantMessage.getCreatedAt()),
+                sources);
     }
 
     @Override

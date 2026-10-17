@@ -110,10 +110,28 @@ clp:
       # 必须形如 {id}.{secret},环境变量或本地配置提供
       api-key: ${ZHIPU_API_KEY:}
       embedding-model: embedding-3
-      rerank-model: rerank
+      rerank-model: rerank-pro
       embedding-dimensions: 1024
     chat:
       # 每次请求带上的历史消息条数
       history-window: 20
       # 单用户每分钟最多请求次数
       rate-limit-per-minute: 20
+    rag:
+      enabled: true
+      # 启动时导入 classpath:knowledge/*.md
+      seed-enabled: true
+      max-chunk-chars: 600
+      # 向量与关键词两路召回候选数
+      vector-candidates: 200
+      keyword-candidates: 20
+      # RRF 常数
+      rrf-k: 60
+      fusion-top-n: 10
+      # 精排保留条数与证据阈值
+      rerank-top-n: 4
+      min-score: 0.35
+      max-context-chars: 2000
+      query-embedding-ttl: 1h
+      result-ttl: 5m
+      vector-cache-max: 5000

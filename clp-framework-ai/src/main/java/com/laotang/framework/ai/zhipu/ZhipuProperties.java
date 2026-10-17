@@ -25,7 +25,11 @@ public class ZhipuProperties {
 
     private String embeddingModel = "embedding-3";
 
-    private String rerankModel = "rerank";
+    /**
+     * rerank-pro 的分数更有区分度,适合做证据阈值过滤;
+     * 普通 rerank 对短文本常返回接近 1 的分数。
+     */
+    private String rerankModel = "rerank-pro";
 
     /**
      * embedding-3 支持自定义维度,这里统一 1024,与数据库向量长度保持一致。

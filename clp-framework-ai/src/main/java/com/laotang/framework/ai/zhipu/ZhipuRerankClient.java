@@ -58,7 +58,8 @@ public class ZhipuRerankClient implements RerankClient {
                 throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "重排服务返回空结果");
             }
             return response.results().stream()
-                    .map(item -> new RerankResult(item.index(), item.relevanceScore()))
+                    .map(item -> toResult(item, documents))
+                    .filter(java.util.Objects::nonNull)
                     .toList();
         } catch (BusinessException ex) {
             throw ex;
@@ -76,6 +77,22 @@ public class ZhipuRerankClient implements RerankClient {
         if (!StringUtils.hasText(properties.getApiKey())) {
             throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "未配置智谱 API Key");
         }
+    }
+
+    /**
+     * rerank(普通版)返回 index,rerank-pro 返回 document 原文。
+     * 这里统一还原成入参下标;找不到对应文档的条目直接丢弃。
+     */
+    private RerankResult toResult(RerankItem item, List<String> documents) {
+        Integer index = item.index();
+        if (index == null && item.document() != null) {
+            int found = documents.indexOf(item.document());
+            index = found >= 0 ? found : null;
+        }
+        if (index == null || index < 0 || index >= documents.size()) {
+            return null;
+        }
+        return new RerankResult(index, item.relevanceScore());
     }
 
     private String truncate(String body) {
@@ -99,7 +116,8 @@ public class ZhipuRerankClient implements RerankClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RerankItem(
-            int index,
+            Integer index,
+            String document,
             @JsonProperty("relevance_score") double relevanceScore) {
     }
 }

@@ -37,6 +37,7 @@ public final class RedisKey {
     public static final String AI_CHAT_RATE = PREFIX + "ai:chat:rate:";
     public static final String AI_CONVERSATION_LOCK = PREFIX + "ai:conversation:lock:";
     public static final String AI_QUERY_EMBEDDING = PREFIX + "ai:embedding:query:";
+    public static final String AI_RAG_RESULT = PREFIX + "ai:rag:result:";
 
     private RedisKey() {
     }
@@ -115,5 +116,9 @@ public final class RedisKey {
 
     public static String aiQueryEmbedding(String contentHash) {
         return AI_QUERY_EMBEDDING + contentHash;
+    }
+
+    public static String aiRagResult(String scope, String contentHash) {
+        return AI_RAG_RESULT + scope + ":" + contentHash;
     }
 }
