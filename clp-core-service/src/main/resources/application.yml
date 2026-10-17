@@ -99,3 +99,5 @@ clp:
     access-token-expire: 30m
     refresh-token-expire: 7d
     issuer: community-life-platform
+  order:
+    timeout: 30m

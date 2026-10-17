@@ -28,6 +28,7 @@ public enum ErrorCode {
     NOT_FOUND(1002, "资源不存在", 404),
     TOO_MANY_REQUESTS(1003, "请求过于频繁", 429),
     SERVICE_UNAVAILABLE(1004, "依赖服务不可用", 503),
+    REQUEST_PROCESSING(1005, "请求处理中,请稍后重试", 409),
 
     // ---------- 认证与权限 ----------
     UNAUTHORIZED(2001, "未登录", 401),
@@ -53,7 +54,13 @@ public enum ErrorCode {
     // ---------- 商品 ----------
     PRODUCT_NOT_FOUND(5001, "商品不存在", 404),
     PRODUCT_OFF_SALE(5002, "商品已下架", 409),
-    STOCK_NOT_ENOUGH(5003, "库存不足", 409);
+    STOCK_NOT_ENOUGH(5003, "库存不足", 409),
+
+    // ---------- 订单 ----------
+    ORDER_NOT_FOUND(6001, "订单不存在", 404),
+    ORDER_STATUS_CONFLICT(6002, "当前订单状态不允许该操作", 409),
+    DUPLICATE_ORDER(6003, "重复下单", 409),
+    ORDER_TIMEOUT(6004, "订单已超时关闭", 422);
 
     private final int code;
     private final String message;
