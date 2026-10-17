@@ -37,3 +37,14 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### 编译产物 ###
+target/
+.idea/
+*.iml
+*.log
+.env
+.DS_Store
+
+### 本地配置(含密码,禁止提交) ###
+**/application-local.yml

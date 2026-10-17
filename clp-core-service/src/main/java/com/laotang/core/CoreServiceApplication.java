@@ -2,6 +2,7 @@ package com.laotang.core;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * 应用启动类。
@@ -15,6 +16,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 自动配置会扫描启动类所在包及子包。</p>
  */
 @SpringBootApplication(scanBasePackages = "com.laotang")
+@ConfigurationPropertiesScan("com.laotang")
 public class CoreServiceApplication {
 
     public static void main(String[] args) {

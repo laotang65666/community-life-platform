@@ -1,0 +1,25 @@
+# ============================================================
+# 本地开发配置模板
+#
+# 使用方式:
+#   复制一份并改名为 application-local.yml
+#   填入本地真实密码,该文件不会被 Git 跟踪
+# ============================================================
+
+spring:
+  datasource:
+    password: your_mysql_password
+
+  data:
+    redis:
+      password: your_redis_password
+
+clp:
+  jwt:
+    # HS256 要求至少 32 字节
+    secret: your-32-byte-minimum-secret
+
+  # 需要真实调用 AI 时再填
+  # ai:
+  #   openai:
+  #     api-key: sk-your-deepseek-key

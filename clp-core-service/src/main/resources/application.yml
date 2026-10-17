@@ -1,0 +1,101 @@
+# ============================================================
+# 基础配置:可安全提交到 Git
+# 本地敏感配置(密码等)放在 application-local.yml
+# 该文件已被 .gitignore 忽略,模板见 application-local.yml.example
+# ============================================================
+server:
+  port: 8080
+
+spring:
+  application:
+    name: community-life-platform
+
+  profiles:
+    active: local
+
+  # Knife4j 4.5.0 的扩展类与 springdoc 2.8 不兼容,排除其自动配置;
+  # /doc.html 静态资源仍然可用,文档由 springdoc 生成。
+  autoconfigure:
+    exclude:
+      - com.github.xiaoymin.knife4j.spring.configuration.Knife4jAutoConfiguration
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/clp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: ${MYSQL_PASSWORD:}
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 0
+      password: ${REDIS_PASSWORD:}
+      timeout: 3s
+
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      acks: all
+      retries: 5
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: clp-default
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: manual_immediate
+
+  ai:
+    openai:
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:sk-placeholder}
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.7
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.laotang.core.**.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 本地开发用,上线删掉
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# Knife4j 中文界面:/doc.html
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# ============================================================
+# 业务配置
+# ============================================================
+clp:
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-token-expire: 30m
+    refresh-token-expire: 7d
+    issuer: community-life-platform
