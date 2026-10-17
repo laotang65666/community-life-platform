@@ -19,6 +19,8 @@ public interface IUserService {
 
     void updateLastLogin(Long userId);
 
+    void updateRole(Long userId, String role);
+
     User getById(Long userId);
 
     List<User> findByIds(Collection<Long> ids);

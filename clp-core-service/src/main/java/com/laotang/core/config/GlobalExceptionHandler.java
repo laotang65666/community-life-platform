@@ -6,6 +6,7 @@ import com.laotang.common.result.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -42,6 +43,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         return ResponseEntity.badRequest()
                 .body(Result.fail(ErrorCode.PARAM_INVALID, "参数格式不正确: " + e.getName()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Result<Void>> handleNotReadable(HttpMessageNotReadableException e) {
+        return ResponseEntity.badRequest()
+                .body(Result.fail(ErrorCode.PARAM_INVALID, "请求体格式不正确"));
     }
 
     @ExceptionHandler(Exception.class)

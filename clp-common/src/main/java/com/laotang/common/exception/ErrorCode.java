@@ -40,7 +40,15 @@ public enum ErrorCode {
     SMS_CODE_INVALID(3002, "验证码错误或已过期", 422),
     SMS_TOO_FREQUENT(3003, "验证码发送过于频繁", 429),
     LOGIN_LOCKED(3004, "登录失败次数过多,请 10 分钟后再试", 403),
-    CANNOT_FOLLOW_SELF(3005, "不能关注自己", 422);
+    CANNOT_FOLLOW_SELF(3005, "不能关注自己", 422),
+
+    // ---------- 商户与店铺 ----------
+    MERCHANT_NOT_FOUND(4001, "商户信息不存在", 404),
+    MERCHANT_AUDITING(4002, "已有审核中的入驻申请", 409),
+    MERCHANT_NOT_APPROVED(4003, "商户审核未通过", 403),
+    SHOP_CLOSED(4004, "店铺已关闭", 403),
+    MERCHANT_ALREADY_APPROVED(4005, "您已经是商户", 409),
+    SHOP_NOT_FOUND(4006, "店铺不存在", 404);
 
     private final int code;
     private final String message;

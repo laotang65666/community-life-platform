@@ -68,6 +68,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
+    public void updateRole(Long userId, String role) {
+        lambdaUpdate()
+                .eq(User::getId, userId)
+                .set(User::getRole, role)
+                .update();
+    }
+
+    @Override
     public User getById(Long userId) {
         return baseMapper.selectById(userId);
     }
