@@ -13,6 +13,11 @@ public final class RedisKey {
     public static final String AUTH_LOCK = PREFIX + "auth:lock:";
     public static final String AUTH_REFRESH = PREFIX + "auth:refresh:";
 
+    public static final String SECKILL_STOCK = PREFIX + "seckill:stock:";
+    public static final String SECKILL_USERS = PREFIX + "seckill:users:";
+    public static final String SECKILL_TOKEN = PREFIX + "seckill:token:";
+    public static final String SECKILL_TOKEN_LIMIT = PREFIX + "seckill:token-limit:";
+
     private RedisKey() {
     }
 
@@ -34,5 +39,21 @@ public final class RedisKey {
 
     public static String refresh(Long userId, String jti) {
         return AUTH_REFRESH + userId + ":" + jti;
+    }
+
+    public static String seckillStock(Long voucherId) {
+        return SECKILL_STOCK + voucherId;
+    }
+
+    public static String seckillUsers(Long voucherId) {
+        return SECKILL_USERS + voucherId;
+    }
+
+    public static String seckillToken(String token) {
+        return SECKILL_TOKEN + token;
+    }
+
+    public static String seckillTokenLimit(Long userId, Long voucherId) {
+        return SECKILL_TOKEN_LIMIT + userId + ":" + voucherId;
     }
 }

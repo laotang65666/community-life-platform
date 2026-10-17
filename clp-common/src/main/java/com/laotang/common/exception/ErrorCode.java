@@ -60,7 +60,16 @@ public enum ErrorCode {
     ORDER_NOT_FOUND(6001, "订单不存在", 404),
     ORDER_STATUS_CONFLICT(6002, "当前订单状态不允许该操作", 409),
     DUPLICATE_ORDER(6003, "重复下单", 409),
-    ORDER_TIMEOUT(6004, "订单已超时关闭", 422);
+    ORDER_TIMEOUT(6004, "订单已超时关闭", 422),
+
+    // ---------- 营销与秒杀 ----------
+    VOUCHER_NOT_FOUND(7000, "优惠券不存在", 404),
+    SECKILL_NOT_STARTED(7001, "秒杀未开始", 422),
+    SECKILL_ENDED(7002, "秒杀已结束", 422),
+    SECKILL_STOCK_EMPTY(7003, "秒杀库存不足", 409),
+    SECKILL_DUPLICATE(7004, "重复抢购(一人一单)", 409),
+    SECKILL_TOKEN_INVALID(7005, "秒杀令牌无效或已使用", 422),
+    SECKILL_RATE_LIMITED(7006, "秒杀请求过于频繁", 429);
 
     private final int code;
     private final String message;

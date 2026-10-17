@@ -74,11 +74,15 @@ public class IdempotencyService {
     }
 
     public void markSuccess(Long id, Long bizId) {
+        markSuccess(id, String.valueOf(bizId));
+    }
+
+    public void markSuccess(Long id, String bizId) {
         requiresNew.executeWithoutResult(status ->
                 idempotencyMapper.update(null, new LambdaUpdateWrapper<IdempotencyRecord>()
                         .eq(IdempotencyRecord::getId, id)
                         .set(IdempotencyRecord::getStatus, SUCCESS)
-                        .set(IdempotencyRecord::getBizId, String.valueOf(bizId))));
+                        .set(IdempotencyRecord::getBizId, bizId)));
     }
 
     public void release(Long id) {
