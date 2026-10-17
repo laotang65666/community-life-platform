@@ -72,7 +72,10 @@ community-life-platform/
 ├── clp-framework-lock/      Redisson 分布式锁、延时队列
 ├── clp-framework-mq/        预留(Kafka 目前由 core 的 Outbox / 消费者直接使用)
 ├── clp-framework-ai/        智谱 embedding / rerank 客户端
-└── clp-core-service/        业务主模块(启动类、全部业务域)
+├── clp-core-service/        业务主模块(启动类、全部业务域)
+├── sql/                     建表脚本与演示数据
+├── docs/                    设计文档
+└── loadtest/                压测与冒烟脚本
 ```
 
 依赖方向单向:
@@ -151,7 +154,21 @@ clp-core-service
 
 ### 2. 初始化数据库
 
-按 [04-数据模型](docs/04-数据模型.md) 的 DDL 顺序在 `clp` 库中建表(共 25 张)。
+```bash
+mysql -u root -p -e "
+CREATE DATABASE IF NOT EXISTS clp
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;"
+
+# 25 张表
+mysql --default-character-set=utf8mb4 -u root -p clp < sql/01-schema.sql
+
+# 可选:管理员、商户、店铺、3 个商品
+mysql --default-character-set=utf8mb4 -u root -p clp < sql/02-demo-data.sql
+```
+
+完整的环境准备、Kafka topic、演示流程和常见坑见
+[12-学习与复现指南](docs/12-学习与复现指南.md)。
 
 ### 3. 本地配置
 
@@ -232,6 +249,7 @@ APP_LOG=path/to/app.log bash loadtest/smoke-test.sh
 | [09-秒杀链路详解](docs/09-秒杀链路详解.md) | 令牌、Lua、Outbox、Kafka、幂等、对账 |
 | [10-AI客服设计](docs/10-AI客服设计.md) | 对话、工具、RAG、记忆、可靠性、评估 |
 | [11-订单事件与经营统计](docs/11-订单事件与经营统计.md) | 事件、幂等、日统计、报表、看板 |
+| [12-学习与复现指南](docs/12-学习与复现指南.md) | 环境、SQL、Redis、Kafka、启动、演示、常见坑 |
 
 ## 已知边界
 

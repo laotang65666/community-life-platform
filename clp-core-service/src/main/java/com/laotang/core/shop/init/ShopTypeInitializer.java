@@ -6,8 +6,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
- * 首次启动时写入默认店铺分类。表非空则跳过。
+ * 启动时补齐默认店铺分类。按名称判断,已存在的不重复插入,
+ * 避免演示数据先写入一条分类后导致默认分类整体被跳过。
  */
 @Component
 @RequiredArgsConstructor
@@ -22,14 +26,17 @@ public class ShopTypeInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        Long count = shopTypeMapper.selectCount(null);
-        if (count != null && count > 0) {
-            return;
-        }
+        Set<String> existingNames = shopTypeMapper.selectList(null).stream()
+                .map(ShopType::getName)
+                .collect(Collectors.toSet());
 
         for (int i = 0; i < DEFAULT_TYPES.length; i++) {
+            String name = DEFAULT_TYPES[i];
+            if (existingNames.contains(name)) {
+                continue;
+            }
             ShopType type = new ShopType();
-            type.setName(DEFAULT_TYPES[i]);
+            type.setName(name);
             type.setIcon("");
             type.setSort(i);
             shopTypeMapper.insert(type);
