@@ -24,6 +24,11 @@ public interface IShopService {
      */
     Shop getById(Long shopId);
 
+    /**
+     * 按商户 ID 查店铺;一个商户只对应一家店。不存在返回 null。
+     */
+    Shop getByMerchantId(Long merchantId);
+
     void update(Long shopId, Long merchantId, UpdateShopRequest request);
 
     /**

@@ -25,10 +25,12 @@ import com.laotang.framework.lock.delay.RedissonDelayQueue;
 import com.laotang.parameter.order.request.CreateOrderRequest;
 import com.laotang.parameter.order.response.OrderBriefResponse;
 import com.laotang.parameter.order.response.OrderResponse;
+import com.laotang.parameter.order.response.ShopStatsResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -112,6 +114,31 @@ public class OrderServiceImpl implements IOrderService {
         }
 
         return OrderConverter.toResponse(order, listItems(orderId));
+    }
+
+    @Override
+    public OrderResponse getMyOrderByNo(Long userId, String orderNo) {
+        Order order = orderMapper.selectOne(new LambdaQueryWrapper<Order>()
+                .eq(Order::getOrderNo, orderNo)
+                .eq(Order::getUserId, userId));
+        if (order == null) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        return OrderConverter.toResponse(order, listItems(order.getId()));
+    }
+
+    @Override
+    public ShopStatsResponse shopStats(Long shopId, Long merchantId) {
+        requireShopOwner(shopId, merchantId);
+
+        LocalDate today = LocalDate.now();
+        LocalDateTime start = today.atStartOfDay();
+        return new ShopStatsResponse(
+                today.toString(),
+                orderMapper.countCreatedSince(shopId, start),
+                orderMapper.countPaidSince(shopId, start),
+                orderMapper.sumPaidAmountSince(shopId, start),
+                orderMapper.countPendingAccept(shopId));
     }
 
     @Override

@@ -79,7 +79,14 @@ public enum ErrorCode {
     // ---------- 签到 / 积分 ----------
     ALREADY_SIGNED(9001, "今日已签到", 409),
     POINTS_NOT_ENOUGH(9002, "积分不足", 409),
-    NOTIFICATION_NOT_FOUND(9003, "通知不存在", 404);
+    NOTIFICATION_NOT_FOUND(9003, "通知不存在", 404),
+
+    // ---------- AI ----------
+    AI_CONVERSATION_NOT_FOUND(10001, "AI 会话不存在", 404),
+    AI_SCOPE_FORBIDDEN(10002, "当前角色无权使用该 AI 助手", 403),
+    AI_MESSAGE_TOO_LONG(10003, "消息内容过长", 422),
+    AI_SERVICE_UNAVAILABLE(10004, "AI 助手暂时不可用,请稍后再试", 503),
+    AI_CONVERSATION_BUSY(10005, "该会话正在处理中,请稍后重试", 409);
 
     private final int code;
     private final String message;

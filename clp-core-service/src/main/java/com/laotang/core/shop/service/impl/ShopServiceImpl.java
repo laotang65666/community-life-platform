@@ -71,6 +71,13 @@ public class ShopServiceImpl implements IShopService {
     }
 
     @Override
+    public Shop getByMerchantId(Long merchantId) {
+        return shopMapper.selectOne(new LambdaQueryWrapper<Shop>()
+                .eq(Shop::getMerchantId, merchantId)
+                .last("LIMIT 1"));
+    }
+
+    @Override
     public void update(Long shopId, Long merchantId, UpdateShopRequest request) {
         Shop shop = shopMapper.selectById(shopId);
         if (shop == null) {

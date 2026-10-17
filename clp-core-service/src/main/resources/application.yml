@@ -57,7 +57,7 @@ spring:
       api-key: ${DEEPSEEK_API_KEY:sk-placeholder}
       chat:
         options:
-          model: deepseek-chat
+          model: deepseek-v4-pro
           temperature: 0.7
 
   jackson:
@@ -104,3 +104,16 @@ clp:
   feed:
     # 粉丝数达到该阈值的作者视为大 V,只写发件箱,由读者拉取
     big-v-threshold: 1000
+  ai:
+    zhipu:
+      base-url: https://open.bigmodel.cn
+      # 必须形如 {id}.{secret},环境变量或本地配置提供
+      api-key: ${ZHIPU_API_KEY:}
+      embedding-model: embedding-3
+      rerank-model: rerank
+      embedding-dimensions: 1024
+    chat:
+      # 每次请求带上的历史消息条数
+      history-window: 20
+      # 单用户每分钟最多请求次数
+      rate-limit-per-minute: 20
