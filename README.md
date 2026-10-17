@@ -24,7 +24,7 @@
 | AI 可靠性 | 会话摘要记忆、Redisson 会话锁、15s 硬超时、熔断、固定话术降级、HitRate/MRR 评估 |
 | 数据链路 | 订单事务内写 Outbox,事件幂等消费,聚合日统计,支撑商户报表与管理看板 |
 | 多级缓存 | Caffeine L1 + Redis L2,更新与库存变化时两级失效 |
-| 管理看板 | 单页 Dashboard,管理员登录后查看 KPI 与近 7 天趋势,无外部前端依赖 |
+| 管理端 | Vue 3 + TypeScript 管理前端(看板 / 商户审核 / 内容审核 / 知识库),另有单页只读 Dashboard |
 
 ## 已实现模块
 
@@ -49,6 +49,7 @@
 |---|---|
 | 基础 | JDK 21 · Spring Boot 3.5.4 · Maven 多模块 |
 | 数据 | MySQL 8 · MyBatis-Plus 3.5.7 |
+| 前端 | Vue 3 · TypeScript · Vite · Element Plus · ECharts(管理端演示) |
 | 缓存 | Redis 7 · Redisson · Lua · Caffeine(Caffeine + Redis 两级缓存) |
 | 消息 | Kafka 4.0(Outbox、手动 ACK、消费幂等) |
 | 实时 | WebSocket · Redis Pub/Sub |
@@ -73,6 +74,7 @@ community-life-platform/
 ├── clp-framework-mq/        预留(Kafka 目前由 core 的 Outbox / 消费者直接使用)
 ├── clp-framework-ai/        智谱 embedding / rerank 客户端
 ├── clp-core-service/        业务主模块(启动类、全部业务域)
+├── clp-admin-web/           管理端前端(Vue 3 + TypeScript + Element Plus)
 ├── sql/                     建表脚本与演示数据
 ├── docs/                    设计文档
 └── loadtest/                压测与冒烟脚本
@@ -222,6 +224,23 @@ APP_LOG=path/to/app.log bash loadtest/smoke-test.sh
 
 覆盖登录、店铺/商品、下单支付、订单查询、通知等主链路。
 
+### 7. 管理端前端(可选)
+
+```bash
+cd clp-admin-web
+npm install
+
+# 后端在 8080(默认)
+npm run dev
+# 后端在 8084
+VITE_API_TARGET=http://localhost:8084 npm run dev
+```
+
+浏览器打开 Vite 输出的地址(默认 `http://localhost:5173`)。  
+演示管理员:`13900000000`,验证码在后端日志 `[SMS]` 中查看。
+
+页面:数据看板、商户审核、内容审核、知识库。
+
 ## 测试与压测
 
 | 项 | 结果 |
@@ -254,7 +273,7 @@ APP_LOG=path/to/app.log bash loadtest/smoke-test.sh
 ## 已知边界
 
 - 支付为模拟支付;退款、配送、积分兑换、线上结算未实现。
-- 除只读管理看板外没有其他前端页面,业务接口通过 Swagger 调试。
+- 管理端提供 4 个演示页面;用户端/小程序端尚未实现,业务接口通过 Swagger 调试。
 - 尚未 Docker 化与 CI;Kafka 已提供 `docker-compose.yml`。
 - 未使用布隆过滤器;缓存穿透暂未做专门处理。
 - 日统计从功能上线开始累积,历史订单未回填。
