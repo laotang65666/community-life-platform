@@ -94,6 +94,14 @@ management:
 # 业务配置
 # ============================================================
 clp:
+  cache:
+    # 店铺详情 Redis TTL
+    shop-ttl: 30m
+    # 商品含库存,变化频繁,TTL 更短
+    product-ttl: 60s
+    # 本地 Caffeine TTL,用于限制多节点脏读窗口
+    local-ttl: 60s
+    max-size: 10000
   jwt:
     secret: ${JWT_SECRET:}
     access-token-expire: 30m

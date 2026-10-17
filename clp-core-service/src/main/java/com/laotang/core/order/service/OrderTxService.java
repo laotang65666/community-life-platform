@@ -2,6 +2,7 @@ package com.laotang.core.order.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.laotang.common.constant.RedisKey;
 import com.laotang.common.exception.BusinessException;
 import com.laotang.common.exception.ErrorCode;
 import com.laotang.core.order.entity.Order;
@@ -15,6 +16,7 @@ import com.laotang.core.shop.entity.Shop;
 import com.laotang.core.shop.service.IShopService;
 import com.laotang.core.stats.event.OrderEventPublisher;
 import com.laotang.core.stats.event.OrderEventType;
+import com.laotang.framework.redis.cache.MultiLevelCache;
 import com.laotang.id.SnowflakeIdGenerator;
 import com.laotang.parameter.order.request.CreateOrderRequest;
 import com.laotang.parameter.order.request.OrderItemRequest;
@@ -45,6 +47,7 @@ public class OrderTxService {
     private final IShopService shopService;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final OrderEventPublisher orderEventPublisher;
+    private final MultiLevelCache cache;
 
     @Transactional(rollbackFor = Exception.class)
     public CreatedOrder create(Long userId, CreateOrderRequest request) {
@@ -81,6 +84,8 @@ public class OrderTxService {
                 }
                 throw new BusinessException(ErrorCode.STOCK_NOT_ENOUGH);
             }
+            // 库存变化后失效商品详情缓存
+            cache.evict(RedisKey.cacheProduct(product.getId()));
 
             long amount = Math.multiplyExact(product.getPrice(), itemRequest.quantity().longValue());
             totalAmount = Math.addExact(totalAmount, amount);
@@ -210,6 +215,7 @@ public class OrderTxService {
                 new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, orderId));
         for (OrderItem item : items) {
             productMapper.restoreStock(item.getProductId(), item.getQuantity());
+            cache.evict(RedisKey.cacheProduct(item.getProductId()));
         }
     }
 

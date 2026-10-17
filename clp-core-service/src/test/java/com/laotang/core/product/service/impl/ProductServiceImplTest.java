@@ -10,6 +10,8 @@ import com.laotang.core.product.entity.Product;
 import com.laotang.core.product.mapper.ProductMapper;
 import com.laotang.core.shop.entity.Shop;
 import com.laotang.core.shop.service.IShopService;
+import com.laotang.framework.redis.cache.CacheProperties;
+import com.laotang.framework.redis.cache.MultiLevelCache;
 import com.laotang.parameter.product.request.CreateProductRequest;
 import com.laotang.parameter.product.request.UpdateProductRequest;
 import com.laotang.parameter.product.response.ProductBriefResponse;
@@ -38,6 +40,10 @@ class ProductServiceImplTest {
     private ProductMapper productMapper;
     @Mock
     private IShopService shopService;
+    @Mock
+    private MultiLevelCache cache;
+    @Mock
+    private CacheProperties cacheProperties;
     @InjectMocks
     private ProductServiceImpl productService;
 

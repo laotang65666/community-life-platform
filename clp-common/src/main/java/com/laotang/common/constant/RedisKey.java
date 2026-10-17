@@ -34,6 +34,9 @@ public final class RedisKey {
      */
     public static final String NOTIFY_CHANNEL = PREFIX + "notify:channel";
 
+    public static final String CACHE_SHOP = PREFIX + "cache:shop:";
+    public static final String CACHE_PRODUCT = PREFIX + "cache:product:";
+
     public static final String AI_CHAT_RATE = PREFIX + "ai:chat:rate:";
     public static final String AI_CONVERSATION_LOCK = PREFIX + "ai:conversation:lock:";
     public static final String AI_QUERY_EMBEDDING = PREFIX + "ai:embedding:query:";
@@ -104,6 +107,14 @@ public final class RedisKey {
 
     public static String sign(Long userId, LocalDate date) {
         return SIGN + userId + ":" + date.format(DateTimeFormatter.ofPattern("yyyyMM"));
+    }
+
+    public static String cacheShop(Long shopId) {
+        return CACHE_SHOP + shopId;
+    }
+
+    public static String cacheProduct(Long productId) {
+        return CACHE_PRODUCT + productId;
     }
 
     public static String aiChatRate(Long userId) {

@@ -3,9 +3,12 @@ package com.laotang.core.shop.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.laotang.common.constant.RedisKey;
 import com.laotang.common.exception.BusinessException;
 import com.laotang.common.exception.ErrorCode;
 import com.laotang.common.result.PageResult;
+import com.laotang.framework.redis.cache.CacheProperties;
+import com.laotang.framework.redis.cache.MultiLevelCache;
 import com.laotang.core.merchant.entity.Merchant;
 import com.laotang.core.shop.converter.ShopConverter;
 import com.laotang.core.shop.entity.Shop;
@@ -35,6 +38,8 @@ public class ShopServiceImpl implements IShopService {
 
     private final ShopMapper shopMapper;
     private final ShopTypeMapper shopTypeMapper;
+    private final MultiLevelCache cache;
+    private final CacheProperties cacheProperties;
 
     @Override
     public PageResult<ShopBriefResponse> list(long page, long size, Long typeId, String keyword) {
@@ -58,11 +63,19 @@ public class ShopServiceImpl implements IShopService {
 
     @Override
     public ShopResponse getDetail(Long shopId) {
+        String cacheKey = RedisKey.cacheShop(shopId);
+        ShopResponse cached = cache.get(cacheKey, ShopResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
         Shop shop = shopMapper.selectById(shopId);
         if (shop == null) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
         }
-        return ShopConverter.toResponse(shop);
+        ShopResponse response = ShopConverter.toResponse(shop);
+        cache.put(cacheKey, response, cacheProperties.getShopTtl());
+        return response;
     }
 
     @Override
@@ -118,6 +131,7 @@ public class ShopServiceImpl implements IShopService {
 
         if (changed) {
             shopMapper.update(null, wrapper);
+            cache.evict(RedisKey.cacheShop(shopId));
         }
     }
 

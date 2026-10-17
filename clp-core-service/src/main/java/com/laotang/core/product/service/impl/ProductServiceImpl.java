@@ -3,9 +3,12 @@ package com.laotang.core.product.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.laotang.common.constant.RedisKey;
 import com.laotang.common.exception.BusinessException;
 import com.laotang.common.exception.ErrorCode;
 import com.laotang.common.result.PageResult;
+import com.laotang.framework.redis.cache.CacheProperties;
+import com.laotang.framework.redis.cache.MultiLevelCache;
 import com.laotang.core.product.converter.ProductConverter;
 import com.laotang.core.product.entity.Product;
 import com.laotang.core.product.mapper.ProductMapper;
@@ -33,6 +36,8 @@ public class ProductServiceImpl implements IProductService {
 
     private final ProductMapper productMapper;
     private final IShopService shopService;
+    private final MultiLevelCache cache;
+    private final CacheProperties cacheProperties;
 
     @Override
     public PageResult<ProductBriefResponse> listByShop(Long shopId, long page, long size, String keyword) {
@@ -65,7 +70,15 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     public ProductResponse getDetail(Long productId) {
-        return ProductConverter.toResponse(requireProduct(productId));
+        String cacheKey = RedisKey.cacheProduct(productId);
+        ProductResponse cached = cache.get(cacheKey, ProductResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
+        ProductResponse response = ProductConverter.toResponse(requireProduct(productId));
+        cache.put(cacheKey, response, cacheProperties.getProductTtl());
+        return response;
     }
 
     @Override
@@ -123,6 +136,7 @@ public class ProductServiceImpl implements IProductService {
 
         if (changed) {
             productMapper.update(null, wrapper);
+            cache.evict(RedisKey.cacheProduct(productId));
         }
     }
 
@@ -132,6 +146,7 @@ public class ProductServiceImpl implements IProductService {
         requireOwnedShop(product.getShopId(), merchantId);
         // @TableLogic:逻辑删除
         productMapper.deleteById(productId);
+        cache.evict(RedisKey.cacheProduct(productId));
     }
 
     private Product requireProduct(Long productId) {

@@ -5,6 +5,8 @@ import com.laotang.common.exception.ErrorCode;
 import com.laotang.core.shop.entity.Shop;
 import com.laotang.core.shop.mapper.ShopMapper;
 import com.laotang.core.shop.mapper.ShopTypeMapper;
+import com.laotang.framework.redis.cache.CacheProperties;
+import com.laotang.framework.redis.cache.MultiLevelCache;
 import com.laotang.parameter.shop.request.UpdateShopRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,10 @@ class ShopServiceImplTest {
     private ShopMapper shopMapper;
     @Mock
     private ShopTypeMapper shopTypeMapper;
+    @Mock
+    private MultiLevelCache cache;
+    @Mock
+    private CacheProperties cacheProperties;
     @InjectMocks
     private ShopServiceImpl shopService;
 
